@@ -4,3 +4,6 @@
 [submodule "third_party/Megatron-LM-0.9.0"]
 	path = third_party/Megatron-LM-0.9.0
 	url = https://github.com/NVIDIA/Megatron-LM.git
+[submodule "third_party/flash-linear-attention"]
+	path = third_party/flash-linear-attention
+	url = https://github.com/sustcsonglin/flash-linear-attention.git
