@@ -8,6 +8,36 @@ echo $MEGATRON_PATH
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
+LA_MODULE="pure_mamba2"
+BASE_MODEL="qwen2"
+# SSM
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --base-model ${BASE_MODEL} \
+        "
+
+# # Linear Attention
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --la-mode chunk \
+#         --base-model ${BASE_MODEL} \
+#         --la-feature-map swish \
+#         --la-output-norm rmsnorm \
+#         --la-gate-fn swish \
+#         "
+
+# # Linear RNN
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --la-mode chunk \
+#         --base-model ${BASE_MODEL} \
+#         --la-output-norm groupnorm \
+#         --la-gate-fn swish \
+#         "
+
 ENV=$1
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -267,7 +297,7 @@ TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-NAME="pretrain-mcore-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+NAME="pretrain-mcore-${LA_MODULE}-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
@@ -339,34 +369,6 @@ megatron_options="  \
         --rotary-seq-len-interpolation-factor 1 \
         --no-create-attention-mask-in-dataloader \
         "
-
-# SSM
-linear_moe_options=" \
-        --use-la-module \
-        --la-module pure_mamba2 \
-        --base-model qwen2 \
-        "
-
-# # Linear Attention
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module gla \
-#         --la-mode chunk \
-#         --base-model qwen2 \
-#         --la-feature-map swish \
-#         --la-output-norm rmsnorm \
-#         --la-gate-fn swish \
-#         "
-
-# # Linear RNN
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module gla \
-#         --la-mode chunk \
-#         --base-model qwen2 \
-#         --la-output-norm groupnorm \
-#         --la-gate-fn swish \
-#         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options} ${linear_moe_options} 2>&1 | sudo tee -a $LOG_FILE"
