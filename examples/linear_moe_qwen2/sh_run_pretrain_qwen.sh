@@ -2,26 +2,26 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 sh run_pretrain_qwen.sh  \
 dsw  \
-0.5B   \
+A1B   \
 4    \
-8 \
+32 \
 1e-5   \
 1e-6   \
-128  \
-128  \
+2048  \
+2048  \
 bf16  \
 1   \
 1  \
 1 \
 sel  \
-false   \
+true   \
 false  \
 false   \
 false   \
 100000  \
-/cpfs01/user/sunweigao/my/qwen-datasets/wudao_qwenbpe_text_document  \
+/cpfs01/user/sunweigao/my/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document  \
 Qwen/Qwen2-0.5B  \
-100000000   \
+100000000000   \
 10000   \
 ./output
 

@@ -10,12 +10,12 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 ENV=$1
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=2
+GPUS_PER_NODE=8
 
 elif [ $ENV = dlc ]; then
 
@@ -69,6 +69,24 @@ EXTRA_VOCAB_SIZE=293
 moe_options=" \
             "
 
+elif [ $MODEL_SIZE = 0.5Boriginal ]; then
+
+HIDDEN_SIZE=896
+INTERMEDIATE_SIZE=4864
+MAX_POSITION_EMBEDDINGS=131072
+MAX_WINDOW_LAYERS=24
+NUM_ATTENTION_HEADS=14
+NUM_HIDDEN_LAYERS=24
+NUM_KEY_VALUE_HEADS=2
+RMS_NORM_EPS=1e-6
+ROPE_THETA=1000000
+SLIDING_WINDOW=131072
+EXTRA_VOCAB_SIZE=293
+
+moe_options=" \
+            "
+
+
 elif [ $MODEL_SIZE = 1.5B ]; then
 
 HIDDEN_SIZE=1536
@@ -119,6 +137,32 @@ EXTRA_VOCAB_SIZE=421
 
 moe_options=" \
             "
+
+elif [ $MODEL_SIZE = A1B ]; then
+
+HIDDEN_SIZE=1024
+INTERMEDIATE_SIZE=4096
+MAX_POSITION_EMBEDDINGS=4096
+MAX_WINDOW_LAYERS=16
+MOE_INTERMEDIATE_SIZE=1024
+NUM_ATTENTION_HEADS=16
+NUM_EXPERTS=32
+NUM_EXPERTS_PER_TOPK=4
+NUM_HIDDEN_LAYERS=16
+NUM_KEY_VALUE_HEADS=16
+RMS_NORM_EPS=1e-6
+ROPE_THETA=10000
+SHARED_EXPERT_INTERMEDIATE_SIZE=4096
+SLIDING_WINDOW=131072
+EXTRA_VOCAB_SIZE=293
+
+moe_options=" \
+            --moe-router-topk ${NUM_EXPERTS_PER_TOPK} \
+            --num-experts ${NUM_EXPERTS} \
+            --expert-model-parallel-size ${EP}\
+            --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+            --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE} \
+            --enable-shared-expert"
 
 elif [ $MODEL_SIZE = A14B ]; then
 
@@ -261,11 +305,12 @@ megatron_options="  \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
         --max-padding-length ${PAD_LEN} \
-        --log-interval 1 \
-        --eval-interval 10000 \
+        --log-interval 10 \
+        --eval-interval 100000 \
         --eval-iters 10 \
         --save-interval ${SAVE_INTERVAL} \
-        --tensorboard-queue-size 1 \
+        --tensorboard-log-interval 10 \
+        --tensorboard-queue-size 1000 \
         --tensorboard-dir ${TENSORBOARD_DIR} \
         --log-timers-to-tensorboard \
         --log-batch-size-to-tensorboard \
@@ -295,23 +340,23 @@ megatron_options="  \
         --no-create-attention-mask-in-dataloader \
         "
 
-# # SSM
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module pure_mamba2 \
-#         --base-model qwen2 \
-#         "
-
-# Linear Attention
+# SSM
 linear_moe_options=" \
         --use-la-module \
-        --la-module gla \
-        --la-mode chunk \
+        --la-module pure_mamba2 \
         --base-model qwen2 \
-        --la-feature-map swish \
-        --la-output-norm rmsnorm \
-        --la-gate-fn swish \
         "
+
+# # Linear Attention
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module gla \
+#         --la-mode chunk \
+#         --base-model qwen2 \
+#         --la-feature-map swish \
+#         --la-output-norm rmsnorm \
+#         --la-gate-fn swish \
+#         "
 
 # # Linear RNN
 # linear_moe_options=" \
