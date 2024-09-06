@@ -164,11 +164,11 @@ cython_debug/
 # Linear-MoE
 .idea
 Megatron-LM*
-Megatron-MoE*
 LM-Evaluation-Harness*
 *.pyc
-output*
+output
 checkpoint
 data-cache
 tensorboard
+log
 triton-cache

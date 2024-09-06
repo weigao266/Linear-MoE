@@ -479,7 +479,7 @@ def get_patch_args(parser):
 
     group.add_argument('--la-feature-map',
                        type=str,
-                       default='elementwise_product')
+                       default=None)
 
     group.add_argument(
         '--la-tie-feature-map-qk',
