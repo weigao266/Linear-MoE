@@ -282,6 +282,7 @@ def get_based_linear_moe_layer_local_spec(
                 # params={"attn_mask_type": AttnMaskType.causal},
                 submodules=LinearAttentionSubmodules(
                     qkv_proj=ColumnParallelLinear,
+                    o_gate_proj=ColumnParallelLinear,
                     core_linear_attention=Based,
                     o_proj=RowParallelLinear,
                 ),
@@ -314,6 +315,7 @@ def get_rebased_linear_moe_layer_local_spec(
                 # params={"attn_mask_type": AttnMaskType.causal},
                 submodules=LinearAttentionSubmodules(
                     qkv_proj=ColumnParallelLinear,
+                    o_gate_proj=ColumnParallelLinear,
                     core_linear_attention=Rebased,
                     o_proj=RowParallelLinear,
                 ),

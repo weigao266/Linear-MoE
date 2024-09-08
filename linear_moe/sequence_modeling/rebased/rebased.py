@@ -25,15 +25,14 @@ class Rebased(MegatronModule):
         
         self.la_mode = config.la_mode
         self.hidden_size = config.hidden_size
+        self.key_dim = int(config.hidden_size * expand_k)
+        self.value_dim = int(config.hidden_size * expand_v)
         self.num_heads = config.num_attention_heads
         # num_kv_heads here mains num_query_groups
         self.num_kv_heads = config.num_query_groups if config.num_query_groups is not None else config.num_attention_heads
         self.num_kv_groups = self.num_heads // self.num_kv_heads
         self.head_qk_dim = self.key_dim // self.num_heads
         self.head_v_dim = self.value_dim // self.num_heads
-
-        self.key_dim = int(config.hidden_size * expand_k)
-        self.value_dim = int(config.hidden_size * expand_v)
         self.la_eps = eps
         self.la_feature_map_fn = RebasedFeatureMap(self.head_qk_dim, use_gamma, use_beta, normalize)
         
@@ -70,14 +69,14 @@ class Rebased(MegatronModule):
         # torch.Size([128, 4, 16, 32])
         q, k, v = (rearrange(x, 'n b h d -> b h n d') for x in (q, k, v))
 
-        q, k = self.feature_map(q, flatten=(self.la_mode != 'parallel')), self.feature_map(k, flatten=(self.la_mode != 'parallel'))
+        q, k = self.la_feature_map_fn(q, flatten=(self.la_mode != 'parallel')), self.la_feature_map_fn(k, flatten=(self.la_mode != 'parallel'))
 
         # expects q: B, H, T, K
         if self.la_mode in ['chunk', 'fused_chunk']:
-            output = self._la_impl(q, k, v, normalize=True, scale=1)
+            output, _ = self._la_impl(q, k, v, normalize=True, scale=1)
         elif self.la_mode == 'parallel':
             assert q.shape[-1] <= 128
-            output = self._la_impl(q, k, v, self.la_eps, True, True)
+            output, _ = self._la_impl(q, k, v, self.la_eps, True, True)
 
         output = rearrange(output, 'b h n d -> n b (h d)')
         return output
