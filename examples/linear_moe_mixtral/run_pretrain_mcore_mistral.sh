@@ -251,7 +251,7 @@ megatron_options="  \
 # Linear Attention
 linear_moe_options=" \
         --use-la-module \
-        --la-module gla \
+        --la-module rebased \
         --la-mode chunk \
         --base-model mixtral \
         --la-feature-map swish \

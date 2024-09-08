@@ -267,15 +267,15 @@ DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $
 # linear_moe_options=" \
 #         --use-la-module \
 #         --la-module pure_mamba2 \
-#         --base-model qwen2 \
+#         --base-model deepseekv2 \
 #         "
 
 # Linear Attention
 linear_moe_options=" \
         --use-la-module \
-        --la-module retention \
+        --la-module rebased \
         --la-mode chunk \
-        --base-model qwen2 \
+        --base-model deepseekv2 \
         --la-feature-map swish \
         --la-output-norm rmsnorm \
         --la-gate-fn swish \
@@ -286,7 +286,7 @@ linear_moe_options=" \
 #         --use-la-module \
 #         --la-module gla \
 #         --la-mode chunk \
-#         --base-model qwen2 \
+#         --base-model deepseekv2 \
 #         --la-output-norm groupnorm \
 #         --la-gate-fn swish \
 #         "

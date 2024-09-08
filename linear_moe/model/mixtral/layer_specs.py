@@ -32,6 +32,8 @@ from .transformer_layer import TransformerLayer, TransformerLayerSubmodules
 
 from linear_moe.sequence_modeling.attention import DotProductAttention
 from linear_moe.sequence_modeling.retention import Retention
+from linear_moe.sequence_modeling.based import Based
+from linear_moe.sequence_modeling.rebased import Rebased
 from linear_moe.sequence_modeling.basic_linear_attention import BasicLinearAttention
 from linear_moe.sequence_modeling.gla import GLA
 from linear_moe.sequence_modeling.gla import GLAGate
@@ -279,6 +281,96 @@ def get_retention_linear_moe_layer_local_spec(num_experts: int = None, moe_group
                     qkv_proj=ColumnParallelLinear,
                     o_gate_proj=ColumnParallelLinear,
                     core_linear_attention=Retention,
+                    o_proj=RowParallelLinear,
+                ),
+            ),
+            self_attn_bda=get_bias_dropout_add,
+            pre_mlp_layernorm=FusedLayerNorm,
+            mlp=mlp,
+            mlp_bda=get_bias_dropout_add,
+            sharded_state_dict_keys_map={
+                'input_layernorm.': 'self_attention.linear_qkv.layer_norm_',
+                'pre_mlp_layernorm.': 'mlp.linear_fc1.layer_norm_',
+            },
+        ),
+    )
+
+
+
+# Use this spec for an implementation using only modules in megatron core
+def get_based_linear_moe_layer_local_spec(num_experts: int = None, moe_grouped_gemm: bool = False) -> ModuleSpec:
+    """
+    Generates a specification for a GPT transformer layer using only the core modules from Megatron.
+
+    Args:
+        num_experts: Optional; the number of experts to use in a Mixture of Experts (MoE) setup.
+                     If `None`, a dense multi-layer perceptron (MLP) is used instead of MoE.
+        moe_grouped_gemm: Optional; if `True`, enables grouped GEMM for MoE operations,
+                          which can be more efficient for certain configurations.
+
+    Returns:
+        A ModuleSpec object that specifies how to construct a GPT transformer layer with
+        standard Megatron core modules without the lower-level Transformer Engine optimizations.
+    """
+    mlp = _get_mlp_module_spec(
+        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
+    )
+    return ModuleSpec(
+        module=TransformerLayer,
+        submodules=TransformerLayerSubmodules(
+            input_layernorm=FusedLayerNorm,
+            self_attention=ModuleSpec(
+                module=LinearAttention,
+                # params={"attn_mask_type": AttnMaskType.causal},
+                submodules=LinearAttentionSubmodules(
+                    qkv_proj=ColumnParallelLinear,
+                    o_gate_proj=ColumnParallelLinear,
+                    core_linear_attention=Based,
+                    o_proj=RowParallelLinear,
+                ),
+            ),
+            self_attn_bda=get_bias_dropout_add,
+            pre_mlp_layernorm=FusedLayerNorm,
+            mlp=mlp,
+            mlp_bda=get_bias_dropout_add,
+            sharded_state_dict_keys_map={
+                'input_layernorm.': 'self_attention.linear_qkv.layer_norm_',
+                'pre_mlp_layernorm.': 'mlp.linear_fc1.layer_norm_',
+            },
+        ),
+    )
+
+
+
+# Use this spec for an implementation using only modules in megatron core
+def get_rebased_linear_moe_layer_local_spec(num_experts: int = None, moe_grouped_gemm: bool = False) -> ModuleSpec:
+    """
+    Generates a specification for a GPT transformer layer using only the core modules from Megatron.
+
+    Args:
+        num_experts: Optional; the number of experts to use in a Mixture of Experts (MoE) setup.
+                     If `None`, a dense multi-layer perceptron (MLP) is used instead of MoE.
+        moe_grouped_gemm: Optional; if `True`, enables grouped GEMM for MoE operations,
+                          which can be more efficient for certain configurations.
+
+    Returns:
+        A ModuleSpec object that specifies how to construct a GPT transformer layer with
+        standard Megatron core modules without the lower-level Transformer Engine optimizations.
+    """
+    mlp = _get_mlp_module_spec(
+        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
+    )
+    return ModuleSpec(
+        module=TransformerLayer,
+        submodules=TransformerLayerSubmodules(
+            input_layernorm=FusedLayerNorm,
+            self_attention=ModuleSpec(
+                module=LinearAttention,
+                # params={"attn_mask_type": AttnMaskType.causal},
+                submodules=LinearAttentionSubmodules(
+                    qkv_proj=ColumnParallelLinear,
+                    o_gate_proj=ColumnParallelLinear,
+                    core_linear_attention=Rebased,
                     o_proj=RowParallelLinear,
                 ),
             ),
