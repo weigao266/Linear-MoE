@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional, Union
+from einops import rearrange
 import torch
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
@@ -25,7 +26,8 @@ class LinearAttention(MegatronModule):
     ):
         super().__init__(config)
         self.config = config
-        
+        self.la_module = self.config.la_module
+        self.hidden_size = self.config.hidden_size
         self.query_dim = self.config.hidden_size
         self.key_dim = int(self.config.hidden_size * self.config.expand_k)
         self.value_dim = int(self.config.hidden_size * self.config.expand_v)
@@ -58,11 +60,14 @@ class LinearAttention(MegatronModule):
             is_expert=False,
         )
         
-        if self.config.la_module == 'gla':
+        if self.la_module == 'gla':
             self.gk_proj = build_module(
                 submodules.gk_proj,
                 self.config,
             )
+        
+        if self.la_module == 'deltanet':
+            self.beta_proj = torch.nn.Linear(self.hidden_size, self.num_heads, bias=False)
         
         self.core_linear_attention = build_module(
             submodules.core_linear_attention,
@@ -96,10 +101,15 @@ class LinearAttention(MegatronModule):
 
         qkv, _ = self.qkv_proj(hidden_states)
         o_gate, _ = self.o_gate_proj(hidden_states)
-        if self.config.la_module == 'gla':
+        if self.la_module == 'gla':
             gk = self.gk_proj(hidden_states)
         else:
             gk = None
+        
+        if self.la_module == 'deltanet':
+            beta = rearrange(self.beta_proj(hidden_states), 'b n h -> b h n').sigmoid()
+        else:
+            beta = None
 
         q, k, v = torch.split(
             qkv.view(qkv.size()[:-1] + (self.num_heads, -1)),
@@ -152,12 +162,19 @@ class LinearAttention(MegatronModule):
             # value_layer = apply_rotary_pos_emb(value_layer, k_pos_emb)
         
         # expect q: n b h d
-        if gk is not None:
+        if self.la_module == 'gla':
             o = self.core_linear_attention(
                 q=q,
                 k=k,
                 v=v,
                 gk=gk,
+            )
+        elif self.la_module == 'deltanet':
+            o = self.core_linear_attention(
+                q=q,
+                k=k,
+                v=v,
+                beta=beta,
             )
         else:
             o = self.core_linear_attention(
@@ -165,6 +182,7 @@ class LinearAttention(MegatronModule):
                 k=k,
                 v=v,
             )
+        
         # o: n b (h d)
         o = o * self.la_gate_fn(o_gate)
         o, bias = self.o_proj(o)
