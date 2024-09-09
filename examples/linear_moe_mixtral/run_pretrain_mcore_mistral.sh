@@ -251,7 +251,7 @@ megatron_options="  \
 # Linear Attention
 linear_moe_options=" \
         --use-la-module \
-        --la-module rebased \
+        --la-module deltanet \
         --la-mode chunk \
         --base-model mixtral \
         --la-feature-map swish \
@@ -262,7 +262,7 @@ linear_moe_options=" \
 # # Linear RNN
 # linear_moe_options=" \
 #         --use-la-module \
-#         --la-module gla \
+#         --la-module rwkv6 \
 #         --la-mode chunk \
 #         --base-model mixtral \
 #         --la-output-norm groupnorm \

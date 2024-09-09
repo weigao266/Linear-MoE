@@ -52,6 +52,8 @@ from linear_moe.model.mixtral.layer_specs import (
     get_basic_linear_attention_linear_moe_layer_local_spec,
     get_gla_linear_moe_layer_local_spec,
     get_rwkv6_linear_moe_layer_local_spec,
+    get_deltanet_linear_moe_layer_local_spec,
+    get_hgrn2_linear_moe_layer_local_spec,
 )
 from linear_moe.model.mixtral.transformer_config import MixtralTransformerConfig
 
@@ -79,8 +81,12 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             transformer_layer_spec = get_basic_linear_attention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
         elif args.la_module == "gla":
             transformer_layer_spec = get_gla_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+        elif args.la_module == "deltanet":
+            transformer_layer_spec = get_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
         elif args.la_module == "rwkv6":
             transformer_layer_spec = get_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+        elif args.la_module == "hgrn2":
+            transformer_layer_spec = get_hgrn2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
     else:
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
 

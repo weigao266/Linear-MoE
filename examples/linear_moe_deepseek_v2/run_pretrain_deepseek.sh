@@ -273,7 +273,7 @@ DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $
 # Linear Attention
 linear_moe_options=" \
         --use-la-module \
-        --la-module rebased \
+        --la-module deltanet \
         --la-mode chunk \
         --base-model deepseekv2 \
         --la-feature-map swish \
@@ -284,7 +284,7 @@ linear_moe_options=" \
 # # Linear RNN
 # linear_moe_options=" \
 #         --use-la-module \
-#         --la-module gla \
+#         --la-module rwkv6 \
 #         --la-mode chunk \
 #         --base-model deepseekv2 \
 #         --la-output-norm groupnorm \
