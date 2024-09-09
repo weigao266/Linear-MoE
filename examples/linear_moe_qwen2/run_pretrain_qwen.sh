@@ -8,8 +8,10 @@ echo $MEGATRON_PATH
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
-LA_MODULE="rwkv6"
+LA_MODULE="hgrn2"
 BASE_MODEL="qwen2"
+HYBRID_ATTENTION_RATIO=0.0
+HYBRID_MLP_RATIO=0.0
 
 # # SSM
 # linear_moe_options=" \
@@ -369,6 +371,8 @@ megatron_options="  \
         --rotary-base ${ROPE_THETA} \
         --rotary-seq-len-interpolation-factor 1 \
         --no-create-attention-mask-in-dataloader \
+        --hybrid-attention-ratio ${HYBRID_ATTENTION_RATIO} \
+        --hybrid-mlp-ratio ${HYBRID_MLP_RATIO} \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py

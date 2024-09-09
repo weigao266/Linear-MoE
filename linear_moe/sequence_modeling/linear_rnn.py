@@ -31,6 +31,7 @@ class LinearRNN(MegatronModule):
         self,
         config,
         submodules: LinearRNNSubmodules,
+        layer_number=None,
     ):
         super().__init__(config)
         self.config = config

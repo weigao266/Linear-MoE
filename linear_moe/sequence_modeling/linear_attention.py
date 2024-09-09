@@ -23,6 +23,7 @@ class LinearAttention(MegatronModule):
         self,
         config,
         submodules: LinearAttentionSubmodules,
+        layer_number=None,
     ):
         super().__init__(config)
         self.config = config
