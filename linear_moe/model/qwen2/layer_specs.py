@@ -39,6 +39,7 @@ from linear_moe.sequence_modeling.gla import GLAGate
 from linear_moe.sequence_modeling.deltanet import DeltaNet
 from linear_moe.sequence_modeling.rwkv6 import DDLerpLinear
 from linear_moe.sequence_modeling.rwkv6 import RWKV6
+from linear_moe.sequence_modeling.hgrn2 import HGRN2
 from linear_moe.sequence_modeling.ssm import MambaStack, MambaStackSubmodules
 from linear_moe.sequence_modeling.mamba2.mamba_layer import MambaLayer, MambaLayerSubmodules
 from linear_moe.sequence_modeling.mamba2.mamba_mixer import MambaMixer, MambaMixerSubmodules
@@ -467,6 +468,41 @@ def get_rwkv6_linear_moe_layer_local_spec(
             },
         ),
     )
+
+
+# Use this spec for an implementation using only modules in megatron core
+def get_hgrn2_linear_moe_layer_local_spec(
+    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
+) -> ModuleSpec:
+    mlp = _get_mlp_module_spec(
+        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
+    )
+    return ModuleSpec(
+        module=TransformerLayer,
+        submodules=TransformerLayerSubmodules(
+            input_layernorm=Qwen2RMSNorm,
+            self_attention=ModuleSpec(
+                module=LinearRNN,
+                # params={"attn_mask_type": AttnMaskType.causal},
+                submodules=LinearRNNSubmodules(
+                    q_proj=nn.Linear,
+                    f_proj=nn.Linear,
+                    i_proj=nn.Linear,
+                    core_linear_rnn=HGRN2,
+                    o_proj=nn.Linear,
+                ),
+            ),
+            self_attn_bda=get_bias_dropout_add,
+            pre_mlp_layernorm=Qwen2RMSNorm,
+            mlp=mlp,
+            mlp_bda=get_bias_dropout_add,
+            sharded_state_dict_keys_map={
+                'input_layernorm.': 'self_attention.linear_qkv.layer_norm_',
+                'pre_mlp_layernorm.': 'mlp.linear_fc1.layer_norm_',
+            },
+        ),
+    )
+
 
 # Helper function to get module spec for MLP/MoE
 def _get_mlp_module_spec(

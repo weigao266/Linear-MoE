@@ -3,8 +3,8 @@ export HF_ENDPOINT=https://hf-mirror.com
 sh run_pretrain_qwen.sh  \
 dlc  \
 A1B   \
-16    \
-256 \
+8    \
+128 \
 1e-5   \
 1e-6   \
 2048  \

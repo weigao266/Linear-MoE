@@ -80,8 +80,11 @@ class RWKV6(MegatronModule):
         
         # expects q: b, h, n, d
         output, _ = self._la_impl(r, k, v, w, u, scale)
-        output = self.la_output_norm(rearrange(output, 'b h n d -> b n (h d)'))
-
-        output = rearrange(output, 'b n (h d) -> n b (h d)', h = self.head_dim)
-
+        if isinstance(self.la_output_norm, GroupNorm):
+            output = self.la_output_norm(rearrange(output, 'b h n d -> b n (h d)'))
+            output = rearrange(output, 'b n (h d) -> n b (h d)', h = self.head_dim)
+        elif isinstance(self.la_output_norm, RMSNorm):
+            output = self.la_output_norm(output)
+            output = rearrange(output, 'b h n d -> n b (h d)')
+        
         return output

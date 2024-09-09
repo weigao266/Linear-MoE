@@ -37,6 +37,7 @@ from linear_moe.model.qwen2.layer_specs import (
     get_gla_linear_moe_layer_local_spec,
     get_deltanet_linear_moe_layer_local_spec,
     get_rwkv6_linear_moe_layer_local_spec,
+    get_hgrn2_linear_moe_layer_local_spec,
 )
 from linear_moe.model.qwen2.model import GPTModel
 from linear_moe.sequence_modeling.mamba2.mamba_model import MambaModel
@@ -74,6 +75,8 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             transformer_layer_spec = get_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "rwkv6":
             transformer_layer_spec = get_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "hgrn2":
+            transformer_layer_spec = get_hgrn2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
     else:
         if use_te:
             transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm,

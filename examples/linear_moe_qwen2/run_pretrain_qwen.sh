@@ -8,14 +8,15 @@ echo $MEGATRON_PATH
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
-LA_MODULE="pure_mamba2"
+LA_MODULE="rwkv6"
 BASE_MODEL="qwen2"
-# SSM
-linear_moe_options=" \
-        --use-la-module \
-        --la-module ${LA_MODULE} \
-        --base-model ${BASE_MODEL} \
-        "
+
+# # SSM
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --base-model ${BASE_MODEL} \
+#         "
 
 # # Linear Attention
 # linear_moe_options=" \
@@ -28,15 +29,15 @@ linear_moe_options=" \
 #         --la-gate-fn swish \
 #         "
 
-# # Linear RNN
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module ${LA_MODULE} \
-#         --la-mode chunk \
-#         --base-model ${BASE_MODEL} \
-#         --la-output-norm groupnorm \
-#         --la-gate-fn swish \
-#         "
+# Linear RNN
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --la-mode chunk \
+        --base-model ${BASE_MODEL} \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        "
 
 ENV=$1
 if [ $ENV = dsw ]; then
