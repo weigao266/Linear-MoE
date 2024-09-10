@@ -7,8 +7,59 @@ MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0
 echo $MEGATRON_PATH
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export HF_ENDPOINT=https://hf-mirror.com
 
-ENV=$1
+ENV=dsw
+MODEL_SIZE=A2.4B
+BATCH_SIZE=1
+GLOBAL_BATCH_SIZE=8
+LR=1e-5
+MIN_LR=1e-6
+SEQ_LEN=128
+PAD_LEN=128
+PR=bf16
+TP=1
+PP=1
+EP=4
+AC=sel
+DO=true
+FL=false
+SP=true
+SAVE_INTERVAL=500
+DATASET_PATH=/cpfs01/user/sunweigao/my/deepseek-datasets/mmap_deepseekv2_datasets_text_document
+PRETRAIN_CHECKPOINT_PATH=deepseek-ai/DeepSeek-V2-Lite
+TRAIN_TOKENS=100000000
+WARMUP_TOKENS=10000
+OUTPUT_BASEPATH=./output
+
+# # SSM
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module pure_mamba2 \
+#         --base-model deepseekv2 \
+#         "
+
+# Linear Attention
+linear_moe_options=" \
+        --use-la-module \
+        --la-module deltanet \
+        --la-mode chunk \
+        --base-model deepseekv2 \
+        --la-feature-map swish \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        "
+
+# # Linear RNN
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module rwkv6 \
+#         --la-mode chunk \
+#         --base-model deepseekv2 \
+#         --la-output-norm groupnorm \
+#         --la-gate-fn swish \
+#         "
+
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
@@ -24,28 +75,6 @@ NODE_RANK=${RANK}
 GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
 
 fi
-
-MODEL_SIZE=$2
-BATCH_SIZE=$3
-GLOBAL_BATCH_SIZE=$4
-LR=$5
-MIN_LR=$6
-SEQ_LEN=$7
-PAD_LEN=$8
-PR=$9
-TP=${10}
-PP=${11}
-EP=${12}
-AC=${13}
-DO=${14}
-FL=${15}
-SP=${16}
-SAVE_INTERVAL=${17}
-DATASET_PATH=${18}
-PRETRAIN_CHECKPOINT_PATH=${19}
-TRAIN_TOKENS=${20}
-WARMUP_TOKENS=${21}
-OUTPUT_BASEPATH=${22}
 
 if [ $MODEL_SIZE = A21B ]; then
 
@@ -261,35 +290,6 @@ megatron_options="  \
 
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-
-
-# # SSM
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module pure_mamba2 \
-#         --base-model deepseekv2 \
-#         "
-
-# Linear Attention
-linear_moe_options=" \
-        --use-la-module \
-        --la-module deltanet \
-        --la-mode chunk \
-        --base-model deepseekv2 \
-        --la-feature-map swish \
-        --la-output-norm rmsnorm \
-        --la-gate-fn swish \
-        "
-
-# # Linear RNN
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module rwkv6 \
-#         --la-mode chunk \
-#         --base-model deepseekv2 \
-#         --la-output-norm groupnorm \
-#         --la-gate-fn swish \
-#         "
 
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_deepseek.py

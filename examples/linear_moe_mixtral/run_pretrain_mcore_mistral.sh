@@ -1,10 +1,65 @@
 #!/bin/bash
 set -e
-ENV=$1
-LINEAR_MOE_PATH=$2
+
+LINEAR_MOE_PATH=../../
 MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.4.0
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export HF_ENDPOINT=https://hf-mirror.com
+
+ENV=dsw
+MODEL_SIZE=Small
+BATCH_SIZE=1
+GLOBAL_BATCH_SIZE=8
+LR=1e-5
+MIN_LR=1e-6
+SEQ_LEN=128
+PAD_LEN=128
+EXTRA_VOCAB_SIZE=0
+PR=bf16
+TP=1
+PP=1
+AC=sel
+DO=true
+FL=false
+SP=false
+TE=false
+MOE=true
+SAVE_INTERVAL=100000
+DATASET_PATH=/cpfs01/user/sunweigao/my/mistral-datasets/wudao_mistralbpe_content_document
+PRETRAIN_CHECKPOINT_PATH=mistralai/Mistral-7B-v0.1
+TRAIN_TOKENS=100000000
+WARMUP_TOKENS=10000
+OUTPUT_BASEPATH=./output
+
+# # SSM
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module pure_mamba2 \
+#         --base-model mixtral \
+#         "
+
+# Linear Attention
+linear_moe_options=" \
+        --use-la-module \
+        --la-module deltanet \
+        --la-mode chunk \
+        --base-model mixtral \
+        --la-feature-map swish \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        "
+
+# # Linear RNN
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module rwkv6 \
+#         --la-mode chunk \
+#         --base-model mixtral \
+#         --la-output-norm groupnorm \
+#         --la-gate-fn swish \
+#         "
+
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
@@ -24,30 +79,6 @@ TOTAL_GPUS=$(($GPUS_PER_NODE*$NNODES))
 fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-
-MODEL_SIZE=$3
-BATCH_SIZE=$4
-GLOBAL_BATCH_SIZE=$5
-LR=$6
-MIN_LR=$7
-SEQ_LEN=$8
-PAD_LEN=$9
-EXTRA_VOCAB_SIZE=${10}
-PR=${11}
-TP=${12}
-PP=${13}
-AC=${14}
-DO=${15}
-FL=${16}
-SP=${17}
-TE=${18}
-MOE=${19}
-SAVE_INTERVAL=${20}
-DATASET_PATH=${21}
-PRETRAIN_CHECKPOINT_PATH=${22}
-TRAIN_TOKENS=${23}
-WARMUP_TOKENS=${24}
-OUTPUT_BASEPATH=${25}
 
 if [ $MODEL_SIZE = Small ]; then
 
@@ -241,33 +272,7 @@ megatron_options="  \
         --transformer-impl transformer_engine \
         "
 
-# # SSM
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module pure_mamba2 \
-#         --base-model mixtral \
-#         "
 
-# Linear Attention
-linear_moe_options=" \
-        --use-la-module \
-        --la-module deltanet \
-        --la-mode chunk \
-        --base-model mixtral \
-        --la-feature-map swish \
-        --la-output-norm rmsnorm \
-        --la-gate-fn swish \
-        "
-
-# # Linear RNN
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module rwkv6 \
-#         --la-mode chunk \
-#         --base-model mixtral \
-#         --la-output-norm groupnorm \
-#         --la-gate-fn swish \
-#         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_mistral.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options} ${linear_moe_options} 2>&1 | sudo tee -a $LOG_FILE"

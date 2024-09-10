@@ -7,6 +7,31 @@ MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0
 echo $MEGATRON_PATH
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export HF_ENDPOINT=https://hf-mirror.com
+
+ENV=dsw
+MODEL_SIZE=A1B
+BATCH_SIZE=1
+GLOBAL_BATCH_SIZE=8
+LR=1e-5
+MIN_LR=1e-6
+SEQ_LEN=2048
+PAD_LEN=2048
+PR=bf16
+TP=1
+PP=1
+EP=1
+AC=sel
+DO=true
+FL=false
+SP=false
+TE=false
+SAVE_INTERVAL=100000
+DATASET_PATH=/cpfs01/user/sunweigao/my/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
+PRETRAIN_CHECKPOINT_PATH=Qwen/Qwen2-0.5B
+TRAIN_TOKENS=100000000000
+WARMUP_TOKENS=10000
+OUTPUT_BASEPATH=./output
 
 LA_MODULE="hgrn2"
 BASE_MODEL="qwen2"
@@ -41,7 +66,6 @@ linear_moe_options=" \
         --la-gate-fn swish \
         "
 
-ENV=$1
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 MASTER_ADDR=localhost
@@ -59,29 +83,6 @@ GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
 fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-
-MODEL_SIZE=$2
-BATCH_SIZE=$3
-GLOBAL_BATCH_SIZE=$4
-LR=$5
-MIN_LR=$6
-SEQ_LEN=$7
-PAD_LEN=$8
-PR=$9
-TP=${10}
-PP=${11}
-EP=${12}
-AC=${13}
-DO=${14}
-FL=${15}
-SP=${16}
-TE=${17}
-SAVE_INTERVAL=${18}
-DATASET_PATH=${19}
-PRETRAIN_CHECKPOINT_PATH=${20}
-TRAIN_TOKENS=${21}
-WARMUP_TOKENS=${22}
-OUTPUT_BASEPATH=${23}
 
 if [ $MODEL_SIZE = 0.5B ]; then
 
