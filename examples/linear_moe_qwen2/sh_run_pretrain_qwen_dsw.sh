@@ -35,8 +35,9 @@ OUTPUT_BASEPATH=./output
 
 LA_MODULE="hybrid_retention"
 BASE_MODEL="qwen2"
-HYBRID_ATTENTION_RATIO=0.0
-HYBRID_MLP_RATIO=0.0
+HYBRID_ATTENTION_RATIO=0.2
+HYBRID_MLP_RATIO=0.2
+LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
 
 # # SSM
 # linear_moe_options=" \
@@ -54,6 +55,7 @@ linear_moe_options=" \
         --la-feature-map swish \
         --la-output-norm rmsnorm \
         --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
         "
 
 # # Linear RNN

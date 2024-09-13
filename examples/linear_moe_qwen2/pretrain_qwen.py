@@ -41,6 +41,7 @@ from linear_moe.model.qwen2.layer_specs import (
     get_hgrn2_linear_moe_layer_local_spec,
 )
 from linear_moe.model.qwen2.model import GPTModel
+from linear_moe.model.qwen2.hybrid_model import HybridGPTModel
 from linear_moe.sequence_modeling.mamba2.mamba_model import MambaModel
 from linear_moe.model.qwen2.transformer_config import Qwen2TransformerConfig
 from linear_moe.arguments import get_patch_args
@@ -65,7 +66,7 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
         elif args.la_module == "retention":
             transformer_layer_spec = get_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "hybrid_retention":
-            transformer_layer_spec = get_hybrid_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+            hybrid_transformer_layer_spec = get_hybrid_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "based":
             transformer_layer_spec = get_based_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "rebased":
@@ -102,6 +103,23 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             parallel_output=True,
             share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
             position_embedding_type=args.position_embedding_type
+        )
+    elif args.la_module in ["hybrid_retention"]:
+        model = HybridGPTModel(
+            config=config,
+            hybrid_transformer_layer_spec=hybrid_transformer_layer_spec,
+            layer_type_list=args.layer_type_list,
+            vocab_size=args.padded_vocab_size,
+            max_sequence_length=args.max_position_embeddings,
+            pre_process=pre_process,
+            post_process=post_process,
+            fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
+            parallel_output=True,
+            share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+            position_embedding_type=args.position_embedding_type,
+            rotary_percent=args.rotary_percent,
+            rotary_base=args.rotary_base,
+            seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
         )
     else:
         model = GPTModel(
