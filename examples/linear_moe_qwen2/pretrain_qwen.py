@@ -41,7 +41,7 @@ from linear_moe.model.qwen2.layer_specs import (
     get_hgrn2_linear_moe_layer_local_spec,
 )
 from linear_moe.model.qwen2.model import GPTModel
-from linear_moe.model.qwen2.hybrid_model import HybridGPTModel
+from linear_moe.model.qwen2.hybrid.hybrid_model import HybridGPTModel
 from linear_moe.sequence_modeling.mamba2.mamba_model import MambaModel
 from linear_moe.model.qwen2.transformer_config import Qwen2TransformerConfig
 from linear_moe.arguments import get_patch_args

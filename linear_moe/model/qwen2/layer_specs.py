@@ -40,7 +40,7 @@ from linear_moe.sequence_modeling.deltanet import DeltaNet
 from linear_moe.sequence_modeling.rwkv6 import DDLerpLinear
 from linear_moe.sequence_modeling.rwkv6 import RWKV6
 from linear_moe.sequence_modeling.hgrn2 import HGRN2
-from linear_moe.model.qwen2.hybrid_transformer_block import HybridTransformerBlock, HybridTransformerBlockSubmodules
+from linear_moe.model.qwen2.hybrid.hybrid_transformer_block import HybridTransformerBlock, HybridTransformerBlockSubmodules
 from linear_moe.sequence_modeling.ssm import MambaStack, MambaStackSubmodules
 from linear_moe.sequence_modeling.mamba2.mamba_layer import MambaLayer, MambaLayerSubmodules
 from linear_moe.sequence_modeling.mamba2.mamba_mixer import MambaMixer, MambaMixerSubmodules

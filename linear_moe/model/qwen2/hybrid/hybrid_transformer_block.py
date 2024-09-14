@@ -36,9 +36,9 @@ from megatron.core.transformer.utils import sharded_state_dict_default
 from megatron.core.utils import make_sharded_tensor_for_checkpoint, make_viewless_tensor
 from megatron.core.transformer.identity_op import IdentityOp
 
-from .transformer_config import TransformerConfig
-from .transformer_layer import BaseTransformerLayer
-from .rms_norm import Qwen2RMSNorm
+from linear_moe.model.qwen2.transformer_config import TransformerConfig
+from linear_moe.model.qwen2.transformer_layer import BaseTransformerLayer
+from linear_moe.model.qwen2.rms_norm import Qwen2RMSNorm
 
 def get_num_layers_to_build(config: TransformerConfig) -> int:
 
