@@ -28,17 +28,15 @@ from linear_moe.data import build_pretrain_dataset_from_original
 from linear_moe.model.qwen2.layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
     get_gpt_layer_local_spec,
-    get_retention_linear_moe_layer_local_spec,
     get_hybrid_retention_linear_moe_layer_local_spec,
-    get_based_linear_moe_layer_local_spec,
-    get_rebased_linear_moe_layer_local_spec,
-    get_pure_mamba2_stack_linear_moe_layer_local_spec,
+    get_hybrid_based_linear_moe_layer_local_spec,
+    get_hybrid_rebased_linear_moe_layer_local_spec,
     get_hybrid_mamba2_stack_linear_moe_layer_local_spec,
-    get_basic_linear_attention_linear_moe_layer_local_spec,
-    get_gla_linear_moe_layer_local_spec,
-    get_deltanet_linear_moe_layer_local_spec,
-    get_rwkv6_linear_moe_layer_local_spec,
-    get_hgrn2_linear_moe_layer_local_spec,
+    get_hybrid_basic_linear_attention_linear_moe_layer_local_spec,
+    get_hybrid_gla_linear_moe_layer_local_spec,
+    get_hybrid_deltanet_linear_moe_layer_local_spec,
+    get_hybrid_rwkv6_linear_moe_layer_local_spec,
+    get_hybrid_hgrn2_linear_moe_layer_local_spec,
 )
 from linear_moe.model.qwen2.model import GPTModel
 from linear_moe.model.qwen2.hybrid.hybrid_model import HybridGPTModel
@@ -59,28 +57,24 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
     use_te = args.transformer_impl == "transformer_engine"
 
     if args.use_la_module:
-        if args.la_module == "pure_mamba2":
-            mamba_stack_spec = get_pure_mamba2_stack_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
-        if args.la_module == "hybrid_mamba2":
+        if args.la_module == "mamba2":
             mamba_stack_spec = get_hybrid_mamba2_stack_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "retention":
-            transformer_layer_spec = get_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
-        elif args.la_module == "hybrid_retention":
             hybrid_transformer_layer_spec = get_hybrid_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "based":
-            transformer_layer_spec = get_based_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+            hybrid_transformer_layer_spec = get_hybrid_based_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "rebased":
-            transformer_layer_spec = get_rebased_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+            hybrid_transformer_layer_spec = get_hybrid_rebased_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "linear_attention":
-            transformer_layer_spec = get_basic_linear_attention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+            hybrid_transformer_layer_spec = get_hybrid_basic_linear_attention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "gla":
-            transformer_layer_spec = get_gla_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+            hybrid_transformer_layer_spec = get_hybrid_gla_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "deltanet":
-            transformer_layer_spec = get_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+            hybrid_transformer_layer_spec = get_hybrid_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "rwkv6":
-            transformer_layer_spec = get_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+            hybrid_transformer_layer_spec = get_hybrid_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "hgrn2":
-            transformer_layer_spec = get_hgrn2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+            hybrid_transformer_layer_spec = get_hybrid_hgrn2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
     else:
         if use_te:
             transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm,
@@ -88,39 +82,40 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
         else:
             transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
 
-    if args.la_module in ["pure_mamba2", "hybrid_mamba2"]:
-        model = MambaModel(
-            config=config,
-            mamba_stack_spec=mamba_stack_spec,
-            vocab_size=args.padded_vocab_size,
-            max_sequence_length=args.max_position_embeddings,
-            pre_process=pre_process,
-            hybrid_attention_ratio=args.hybrid_attention_ratio,
-            hybrid_mlp_ratio=args.hybrid_mlp_ratio,
-            hybrid_override_pattern=args.hybrid_override_pattern,
-            post_process=post_process,
-            fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
-            parallel_output=True,
-            share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
-            position_embedding_type=args.position_embedding_type
-        )
-    elif args.la_module in ["hybrid_retention"]:
-        model = HybridGPTModel(
-            config=config,
-            hybrid_transformer_layer_spec=hybrid_transformer_layer_spec,
-            layer_type_list=args.layer_type_list,
-            vocab_size=args.padded_vocab_size,
-            max_sequence_length=args.max_position_embeddings,
-            pre_process=pre_process,
-            post_process=post_process,
-            fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
-            parallel_output=True,
-            share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
-            position_embedding_type=args.position_embedding_type,
-            rotary_percent=args.rotary_percent,
-            rotary_base=args.rotary_base,
-            seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
-        )
+    if args.use_la_module:
+        if args.la_module in ["mamba2"]:
+            model = MambaModel(
+                config=config,
+                mamba_stack_spec=mamba_stack_spec,
+                vocab_size=args.padded_vocab_size,
+                max_sequence_length=args.max_position_embeddings,
+                pre_process=pre_process,
+                hybrid_attention_ratio=args.hybrid_attention_ratio,
+                hybrid_mlp_ratio=args.hybrid_mlp_ratio,
+                hybrid_override_pattern=args.hybrid_override_pattern,
+                post_process=post_process,
+                fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
+                parallel_output=True,
+                share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+                position_embedding_type=args.position_embedding_type
+            )
+        else:
+            model = HybridGPTModel(
+                config=config,
+                hybrid_transformer_layer_spec=hybrid_transformer_layer_spec,
+                layer_type_list=args.layer_type_list,
+                vocab_size=args.padded_vocab_size,
+                max_sequence_length=args.max_position_embeddings,
+                pre_process=pre_process,
+                post_process=post_process,
+                fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
+                parallel_output=True,
+                share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+                position_embedding_type=args.position_embedding_type,
+                rotary_percent=args.rotary_percent,
+                rotary_base=args.rotary_base,
+                seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
+            )
     else:
         model = GPTModel(
             config=config,
