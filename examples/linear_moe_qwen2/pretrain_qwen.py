@@ -46,12 +46,15 @@ from linear_moe.arguments import get_patch_args
 from linear_moe.tokenizer import get_tokenizer, build_tokenizer
 import torch._dynamo
 torch._dynamo.config.suppress_errors = True
+from linear_moe.utils import compute_weight_and_optimizer_memory
 
 def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, MambaModel, megatron.legacy.model.GPTModel]:
 
     args = get_args()
     build_tokenizer(args)
     print_rank_0('building Qwen2-Linear-MoE model ...')
+    if torch.distributed.get_rank() == 0:
+        compute_weight_and_optimizer_memory(args, verbose=True)
 
     config = core_transformer_config_from_args(args, Qwen2TransformerConfig)
     use_te = args.transformer_impl == "transformer_engine"
