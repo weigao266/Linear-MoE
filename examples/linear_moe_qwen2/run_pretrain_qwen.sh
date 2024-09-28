@@ -20,7 +20,7 @@ PAD_LEN=2048
 PR=bf16
 TP=1
 PP=1
-EP=1
+EP=2
 AC=sel
 DO=true
 FL=false
@@ -58,7 +58,6 @@ HYBRID_MLP_RATIO=0.0
 
 # Linear RNN
 linear_moe_options=" \
-        --use-la-module \
         --la-module ${LA_MODULE} \
         --la-mode chunk \
         --base-model ${BASE_MODEL} \
@@ -67,12 +66,12 @@ linear_moe_options=" \
         "
 
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=8
+GPUS_PER_NODE=2
 
 elif [ $ENV = dlc ]; then
 
@@ -174,19 +173,19 @@ moe_options=" \
 
 elif [ $MODEL_SIZE = A1B ]; then
 
-HIDDEN_SIZE=1024
-INTERMEDIATE_SIZE=4096
-MAX_POSITION_EMBEDDINGS=4096
+HIDDEN_SIZE=2048
+INTERMEDIATE_SIZE=1024
+MAX_POSITION_EMBEDDINGS=131072
 MAX_WINDOW_LAYERS=16
 MOE_INTERMEDIATE_SIZE=1024
 NUM_ATTENTION_HEADS=16
-NUM_EXPERTS=32
-NUM_EXPERTS_PER_TOPK=4
+NUM_EXPERTS=64
+NUM_EXPERTS_PER_TOPK=8
 NUM_HIDDEN_LAYERS=16
 NUM_KEY_VALUE_HEADS=16
 RMS_NORM_EPS=1e-6
 ROPE_THETA=10000
-SHARED_EXPERT_INTERMEDIATE_SIZE=4096
+SHARED_EXPERT_INTERMEDIATE_SIZE=0
 SLIDING_WINDOW=131072
 EXTRA_VOCAB_SIZE=293
 
@@ -195,8 +194,7 @@ moe_options=" \
             --num-experts ${NUM_EXPERTS} \
             --expert-model-parallel-size ${EP}\
             --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
-            --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE} \
-            --enable-shared-expert"
+            --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE}"
 
 elif [ $MODEL_SIZE = A14B ]; then
 
