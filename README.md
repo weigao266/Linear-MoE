@@ -30,10 +30,49 @@ This repository offers a **production-ready framework** for modeling and trainin
 
 # Installation
 
+Your environment should satify the following requirements:
+
 - [PyTorch](https://pytorch.org/) >= 2.0
 - [Triton](https://github.com/openai/triton) >=2.2
-- [einops](https://einops.rocks/)
 
+## Containers
+We recommend using the latest release of [NGC's PyTorch container](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch) with DGX nodes, which already have relatively new versions of CUDA, cuDNN, NCCL, PyTorch, Triton, Apex, TransformerEngine, etc., installed.
+
+On the top of NGC's PyTorch container, you can setup Linear-MoE with:
+```bash
+# Linear-MoE 
+git clone --recurse-submodules https://github.com/weigao266/Linear-MoE-public.git
+```
+
+If you can't use this for some reason, try installing in a Virtualenv.
+
+## Virtualenv
+
+```bash
+# create a conda env, install PyTorch
+conda create -n linear-moe python=3.xx
+conda install pytorch pytorch-cuda=12.x -c pytorch -c nvidia
+
+# some nessesary Python packages
+pip install six regex packaging
+
+# Transformer Engine
+pip install git+https://github.com/NVIDIA/TransformerEngine.git@stable
+
+# Apex
+git clone https://github.com/NVIDIA/apex.git
+pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --config-settings "--build-option=--cpp_ext" --config-settings "--build-option=--cuda_ext" ./
+
+# (if needed) FlashAttention
+MAX_JOBS=8 pip install flash-attn --no-build-isolation
+
+# (if needed) dropout_layer_norm in FlashAttention
+git clone https://github.com/Dao-AILab/flash-attention.git
+cd flash-attention/csrc/layer_norm & pip install .
+
+# Linear-MoE 
+git clone --recurse-submodules https://github.com/weigao266/Linear-MoE-public.git
+```
 
 # Usage
 
