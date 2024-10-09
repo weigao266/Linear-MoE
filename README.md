@@ -40,6 +40,9 @@ We recommend using the latest release of [NGC's PyTorch container](https://ngc.n
 
 On the top of NGC's PyTorch container, you can setup Linear-MoE with:
 ```bash
+# requirements
+pip install -r requirements.txt
+
 # Linear-MoE 
 git clone --recurse-submodules https://github.com/weigao266/Linear-MoE-public.git
 ```
@@ -69,6 +72,9 @@ MAX_JOBS=8 pip install flash-attn --no-build-isolation
 # (if needed) dropout_layer_norm in FlashAttention
 git clone https://github.com/Dao-AILab/flash-attention.git
 cd flash-attention/csrc/layer_norm & pip install .
+
+# requirements
+pip install -r requirements.txt
 
 # Linear-MoE 
 git clone --recurse-submodules https://github.com/weigao266/Linear-MoE-public.git
