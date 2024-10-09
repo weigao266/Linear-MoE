@@ -562,5 +562,9 @@ def get_patch_args(parser):
         type=float,
         default=1.0
     )
+    
+    group.add_argument('--layer-type-list',
+                       type=str,
+                       default=None)
 
     return parser

@@ -24,7 +24,6 @@ from megatron.core.transformer.custom_layers.transformer_engine import (
     TERowParallelLinear,
     TEColumnParallelLinear,
 )
-from megatron.core.transformer.dot_product_attention import DotProductAttention
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.identity_op import IdentityOp
 from megatron.core.transformer.spec_utils import ModuleSpec
@@ -40,6 +39,7 @@ from linear_moe.sequence_modeling.deltanet import DeltaNet
 from linear_moe.sequence_modeling.rwkv6 import DDLerpLinear
 from linear_moe.sequence_modeling.rwkv6 import RWKV6
 from linear_moe.sequence_modeling.hgrn2 import HGRN2
+from linear_moe.model.deepseek_v2.hybrid.hybrid_transformer_block import HybridTransformerBlock, HybridTransformerBlockSubmodules
 from linear_moe.sequence_modeling.ssm import MambaStack, MambaStackSubmodules
 from linear_moe.sequence_modeling.mamba2.mamba_layer import MambaLayer, MambaLayerSubmodules
 from linear_moe.sequence_modeling.mamba2.mamba_mixer import MambaMixer, MambaMixerSubmodules
@@ -133,57 +133,6 @@ def get_gpt_layer_local_spec(
     )
 
 
-def get_pure_mamba2_stack_linear_moe_layer_local_spec(
-    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
-) -> ModuleSpec:
-    mlp = _get_mlp_module_spec(
-        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
-    )
-    return ModuleSpec(
-        module=MambaStack,
-        submodules=MambaStackSubmodules(
-            mamba_layer=ModuleSpec(
-                module=MambaLayer,
-                submodules=MambaLayerSubmodules(
-                    mixer=ModuleSpec(
-                        module=MambaMixer,
-                        submodules=MambaMixerSubmodules(
-                            in_proj=TELayerNormColumnParallelLinear,
-                            out_proj=TERowParallelLinear,
-                        ),
-                    ),
-                    mamba_bda=get_bias_dropout_add,
-                ),
-            ),
-            # Started with spec from gpt_layer_specs.py
-            # Using the TE spec because we had problems getting the non-TE spec
-            # working
-            # swg: uncomment this to use dense mlp_layer
-            # mlp_layer=ModuleSpec(
-            #     module=TransformerLayer,
-            #     submodules=TransformerLayerSubmodules(
-            #         mlp=ModuleSpec(
-            #             module=MLP,
-            #             submodules=MLPSubmodules(
-            #                 linear_fc1=TELayerNormColumnParallelLinear,
-            #                 linear_fc2=TERowParallelLinear,
-            #             ),
-            #         ),
-            #         mlp_bda=get_bias_dropout_add,
-            #     ),
-            # ),
-            # swg: uncomment this to use moe mlp_layer
-            mlp_layer=ModuleSpec(
-                module=TransformerLayer,
-                submodules=TransformerLayerSubmodules(
-                    mlp=mlp,
-                    mlp_bda=get_bias_dropout_add,
-                ),
-            ),
-        ),
-    )
-
-
 def get_hybrid_mamba2_stack_linear_moe_layer_local_spec(
     num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
 ) -> ModuleSpec:
@@ -254,7 +203,7 @@ def get_hybrid_mamba2_stack_linear_moe_layer_local_spec(
 
 
 
-def get_retention_linear_moe_layer_local_spec(
+def get_hybrid_retention_linear_moe_layer_local_spec(
     num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
 ) -> ModuleSpec:
     mlp = _get_mlp_module_spec(
@@ -266,30 +215,257 @@ def get_retention_linear_moe_layer_local_spec(
     )
 
     return ModuleSpec(
-        module=TransformerLayer,
-        submodules=TransformerLayerSubmodules(
-            self_attention=ModuleSpec(
-                module=LinearAttention,
-                # params={"attn_mask_type": AttnMaskType.causal},
-                submodules=LinearAttentionSubmodules(
-                    qkv_proj=ColumnParallelLinear,
-                    o_gate_proj=ColumnParallelLinear,
-                    core_linear_attention=Retention,
-                    o_proj=RowParallelLinear,
+        module=HybridTransformerBlock,
+        submodules=HybridTransformerBlockSubmodules(
+            linear_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=LinearAttention,
+                        # params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=LinearAttentionSubmodules(
+                            qkv_proj=ColumnParallelLinear,
+                            o_gate_proj=ColumnParallelLinear,
+                            core_linear_attention=Retention,
+                            o_proj=RowParallelLinear,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
                 ),
             ),
-            self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            mlp=mlp,
-            mlp_dense=mlp_dense,
-            mlp_bda=get_bias_dropout_add,
+            normal_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=SelfAttention,
+                        params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=SelfAttentionSubmodules(
+                            linear_q_proj=ColumnParallelLinear,
+                            linear_q_a_proj=ColumnParallelLinear,
+                            linear_q_b_proj=ColumnParallelLinear,
+                            linear_kv_a_proj_with_mqa=ColumnParallelLinear,
+                            linear_kv_b_proj=ColumnParallelLinear,
+                            linear_proj=RowParallelLinear,
+                            q_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            kv_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            core_attention=DotProductAttention,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
+        ),
+    )
+
+
+def get_hybrid_based_linear_moe_layer_local_spec(
+    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
+) -> ModuleSpec:
+    mlp = _get_mlp_module_spec(
+        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
+    )
+
+    mlp_dense = _get_mlp_module_spec(
+        use_te=False, num_experts=None, moe_grouped_gemm=moe_grouped_gemm
+    )
+
+    return ModuleSpec(
+        module=HybridTransformerBlock,
+        submodules=HybridTransformerBlockSubmodules(
+            linear_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=LinearAttention,
+                        # params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=LinearAttentionSubmodules(
+                            qkv_proj=ColumnParallelLinear,
+                            o_gate_proj=ColumnParallelLinear,
+                            core_linear_attention=Based,
+                            o_proj=RowParallelLinear,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
+            normal_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=SelfAttention,
+                        params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=SelfAttentionSubmodules(
+                            linear_q_proj=ColumnParallelLinear,
+                            linear_q_a_proj=ColumnParallelLinear,
+                            linear_q_b_proj=ColumnParallelLinear,
+                            linear_kv_a_proj_with_mqa=ColumnParallelLinear,
+                            linear_kv_b_proj=ColumnParallelLinear,
+                            linear_proj=RowParallelLinear,
+                            q_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            kv_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            core_attention=DotProductAttention,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
+        ),
+    )
+
+
+def get_hybrid_rebased_linear_moe_layer_local_spec(
+    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
+) -> ModuleSpec:
+    mlp = _get_mlp_module_spec(
+        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
+    )
+
+    mlp_dense = _get_mlp_module_spec(
+        use_te=False, num_experts=None, moe_grouped_gemm=moe_grouped_gemm
+    )
+
+    return ModuleSpec(
+        module=HybridTransformerBlock,
+        submodules=HybridTransformerBlockSubmodules(
+            linear_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=LinearAttention,
+                        # params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=LinearAttentionSubmodules(
+                            qkv_proj=ColumnParallelLinear,
+                            o_gate_proj=ColumnParallelLinear,
+                            core_linear_attention=Rebased,
+                            o_proj=RowParallelLinear,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
+            normal_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=SelfAttention,
+                        params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=SelfAttentionSubmodules(
+                            linear_q_proj=ColumnParallelLinear,
+                            linear_q_a_proj=ColumnParallelLinear,
+                            linear_q_b_proj=ColumnParallelLinear,
+                            linear_kv_a_proj_with_mqa=ColumnParallelLinear,
+                            linear_kv_b_proj=ColumnParallelLinear,
+                            linear_proj=RowParallelLinear,
+                            q_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            kv_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            core_attention=DotProductAttention,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
+        ),
+    )
+
+
+def get_hybrid_gla_linear_moe_layer_local_spec(
+    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
+) -> ModuleSpec:
+    mlp = _get_mlp_module_spec(
+        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
+    )
+
+    mlp_dense = _get_mlp_module_spec(
+        use_te=False, num_experts=None, moe_grouped_gemm=moe_grouped_gemm
+    )
+
+    return ModuleSpec(
+        module=HybridTransformerBlock,
+        submodules=HybridTransformerBlockSubmodules(
+            linear_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=LinearAttention,
+                        # params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=LinearAttentionSubmodules(
+                            qkv_proj=ColumnParallelLinear,
+                            o_gate_proj=ColumnParallelLinear,
+                            gk_proj=GLAGate,
+                            core_linear_attention=GLA,
+                            o_proj=RowParallelLinear,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
+            normal_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=SelfAttention,
+                        params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=SelfAttentionSubmodules(
+                            linear_q_proj=ColumnParallelLinear,
+                            linear_q_a_proj=ColumnParallelLinear,
+                            linear_q_b_proj=ColumnParallelLinear,
+                            linear_kv_a_proj_with_mqa=ColumnParallelLinear,
+                            linear_kv_b_proj=ColumnParallelLinear,
+                            linear_proj=RowParallelLinear,
+                            q_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            kv_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            core_attention=DotProductAttention,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
         ),
     )
 
 
 
-def get_based_linear_moe_layer_local_spec(
+def get_hybrid_deltanet_linear_moe_layer_local_spec(
     num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
 ) -> ModuleSpec:
     mlp = _get_mlp_module_spec(
@@ -301,29 +477,60 @@ def get_based_linear_moe_layer_local_spec(
     )
 
     return ModuleSpec(
-        module=TransformerLayer,
-        submodules=TransformerLayerSubmodules(
-            self_attention=ModuleSpec(
-                module=LinearAttention,
-                # params={"attn_mask_type": AttnMaskType.causal},
-                submodules=LinearAttentionSubmodules(
-                    qkv_proj=ColumnParallelLinear,
-                    o_gate_proj=ColumnParallelLinear,
-                    core_linear_attention=Based,
-                    o_proj=RowParallelLinear,
+        module=HybridTransformerBlock,
+        submodules=HybridTransformerBlockSubmodules(
+            linear_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=LinearAttention,
+                        # params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=LinearAttentionSubmodules(
+                            qkv_proj=ColumnParallelLinear,
+                            o_gate_proj=ColumnParallelLinear,
+                            core_linear_attention=DeltaNet,
+                            o_proj=RowParallelLinear,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
                 ),
             ),
-            self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            mlp=mlp,
-            mlp_dense=mlp_dense,
-            mlp_bda=get_bias_dropout_add,
+            normal_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=SelfAttention,
+                        params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=SelfAttentionSubmodules(
+                            linear_q_proj=ColumnParallelLinear,
+                            linear_q_a_proj=ColumnParallelLinear,
+                            linear_q_b_proj=ColumnParallelLinear,
+                            linear_kv_a_proj_with_mqa=ColumnParallelLinear,
+                            linear_kv_b_proj=ColumnParallelLinear,
+                            linear_proj=RowParallelLinear,
+                            q_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            kv_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            core_attention=DotProductAttention,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
         ),
     )
 
 
-def get_rebased_linear_moe_layer_local_spec(
+def get_hybrid_basic_linear_attention_linear_moe_layer_local_spec(
     num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
 ) -> ModuleSpec:
     mlp = _get_mlp_module_spec(
@@ -335,134 +542,61 @@ def get_rebased_linear_moe_layer_local_spec(
     )
 
     return ModuleSpec(
-        module=TransformerLayer,
-        submodules=TransformerLayerSubmodules(
-            self_attention=ModuleSpec(
-                module=LinearAttention,
-                # params={"attn_mask_type": AttnMaskType.causal},
-                submodules=LinearAttentionSubmodules(
-                    qkv_proj=ColumnParallelLinear,
-                    o_gate_proj=ColumnParallelLinear,
-                    core_linear_attention=Rebased,
-                    o_proj=RowParallelLinear,
+        module=HybridTransformerBlock,
+        submodules=HybridTransformerBlockSubmodules(
+            linear_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=LinearAttention,
+                        # params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=LinearAttentionSubmodules(
+                            qkv_proj=ColumnParallelLinear,
+                            o_gate_proj=ColumnParallelLinear,
+                            core_linear_attention=BasicLinearAttention,
+                            o_proj=RowParallelLinear,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
                 ),
             ),
-            self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            mlp=mlp,
-            mlp_dense=mlp_dense,
-            mlp_bda=get_bias_dropout_add,
-        ),
-    )
-
-
-def get_gla_linear_moe_layer_local_spec(
-    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
-) -> ModuleSpec:
-    mlp = _get_mlp_module_spec(
-        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
-    )
-
-    mlp_dense = _get_mlp_module_spec(
-        use_te=False, num_experts=None, moe_grouped_gemm=moe_grouped_gemm
-    )
-
-    return ModuleSpec(
-        module=TransformerLayer,
-        submodules=TransformerLayerSubmodules(
-            self_attention=ModuleSpec(
-                module=LinearAttention,
-                # params={"attn_mask_type": AttnMaskType.causal},
-                submodules=LinearAttentionSubmodules(
-                    qkv_proj=ColumnParallelLinear,
-                    o_gate_proj=ColumnParallelLinear,
-                    gk_proj=GLAGate,
-                    core_linear_attention=GLA,
-                    o_proj=RowParallelLinear,
+            normal_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=SelfAttention,
+                        params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=SelfAttentionSubmodules(
+                            linear_q_proj=ColumnParallelLinear,
+                            linear_q_a_proj=ColumnParallelLinear,
+                            linear_q_b_proj=ColumnParallelLinear,
+                            linear_kv_a_proj_with_mqa=ColumnParallelLinear,
+                            linear_kv_b_proj=ColumnParallelLinear,
+                            linear_proj=RowParallelLinear,
+                            q_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            kv_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            core_attention=DotProductAttention,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
                 ),
             ),
-            self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            mlp=mlp,
-            mlp_dense=mlp_dense,
-            mlp_bda=get_bias_dropout_add,
-        ),
-    )
-
-
-
-def get_deltanet_linear_moe_layer_local_spec(
-    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
-) -> ModuleSpec:
-    mlp = _get_mlp_module_spec(
-        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
-    )
-
-    mlp_dense = _get_mlp_module_spec(
-        use_te=False, num_experts=None, moe_grouped_gemm=moe_grouped_gemm
-    )
-
-    return ModuleSpec(
-        module=TransformerLayer,
-        submodules=TransformerLayerSubmodules(
-            self_attention=ModuleSpec(
-                module=LinearAttention,
-                # params={"attn_mask_type": AttnMaskType.causal},
-                submodules=LinearAttentionSubmodules(
-                    qkv_proj=ColumnParallelLinear,
-                    o_gate_proj=ColumnParallelLinear,
-                    core_linear_attention=DeltaNet,
-                    o_proj=RowParallelLinear,
-                ),
-            ),
-            self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            mlp=mlp,
-            mlp_dense=mlp_dense,
-            mlp_bda=get_bias_dropout_add,
-        ),
-    )
-
-
-def get_basic_linear_attention_linear_moe_layer_local_spec(
-    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
-) -> ModuleSpec:
-    mlp = _get_mlp_module_spec(
-        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
-    )
-
-    mlp_dense = _get_mlp_module_spec(
-        use_te=False, num_experts=None, moe_grouped_gemm=moe_grouped_gemm
-    )
-
-    return ModuleSpec(
-        module=TransformerLayer,
-        submodules=TransformerLayerSubmodules(
-            self_attention=ModuleSpec(
-                module=LinearAttention,
-                # params={"attn_mask_type": AttnMaskType.causal},
-                submodules=LinearAttentionSubmodules(
-                    qkv_proj=ColumnParallelLinear,
-                    o_gate_proj=ColumnParallelLinear,
-                    core_linear_attention=BasicLinearAttention,
-                    o_proj=RowParallelLinear,
-                ),
-            ),
-            self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            mlp=mlp,
-            mlp_dense=mlp_dense,
-            mlp_bda=get_bias_dropout_add,
         ),
     )
 
 
 
-def get_rwkv6_linear_moe_layer_local_spec(
+def get_hybrid_rwkv6_linear_moe_layer_local_spec(
     num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
 ) -> ModuleSpec:
     mlp = _get_mlp_module_spec(
@@ -474,32 +608,63 @@ def get_rwkv6_linear_moe_layer_local_spec(
     )
 
     return ModuleSpec(
-        module=TransformerLayer,
-        submodules=TransformerLayerSubmodules(
-            self_attention=ModuleSpec(
-                module=LinearRNN,
-                # params={"attn_mask_type": AttnMaskType.causal},
-                submodules=LinearRNNSubmodules(
-                    r_proj=DDLerpLinear,
-                    w_proj=DDLerpLinear,
-                    k_proj=DDLerpLinear,
-                    v_proj=DDLerpLinear,
-                    g_proj=DDLerpLinear,
-                    core_linear_rnn=RWKV6,
-                    o_proj=nn.Linear,
+        module=HybridTransformerBlock,
+        submodules=HybridTransformerBlockSubmodules(
+            linear_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=LinearRNN,
+                        # params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=LinearRNNSubmodules(
+                            r_proj=DDLerpLinear,
+                            w_proj=DDLerpLinear,
+                            k_proj=DDLerpLinear,
+                            v_proj=DDLerpLinear,
+                            g_proj=DDLerpLinear,
+                            core_linear_rnn=RWKV6,
+                            o_proj=nn.Linear,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
                 ),
             ),
-            self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            mlp=mlp,
-            mlp_dense=mlp_dense,
-            mlp_bda=get_bias_dropout_add,
+            normal_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=SelfAttention,
+                        params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=SelfAttentionSubmodules(
+                            linear_q_proj=ColumnParallelLinear,
+                            linear_q_a_proj=ColumnParallelLinear,
+                            linear_q_b_proj=ColumnParallelLinear,
+                            linear_kv_a_proj_with_mqa=ColumnParallelLinear,
+                            linear_kv_b_proj=ColumnParallelLinear,
+                            linear_proj=RowParallelLinear,
+                            q_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            kv_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            core_attention=DotProductAttention,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
         ),
     )
 
 
-def get_hgrn2_linear_moe_layer_local_spec(
+def get_hybrid_hgrn2_linear_moe_layer_local_spec(
     num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
 ) -> ModuleSpec:
     mlp = _get_mlp_module_spec(
@@ -511,25 +676,56 @@ def get_hgrn2_linear_moe_layer_local_spec(
     )
 
     return ModuleSpec(
-        module=TransformerLayer,
-        submodules=TransformerLayerSubmodules(
-            self_attention=ModuleSpec(
-                module=LinearRNN,
-                # params={"attn_mask_type": AttnMaskType.causal},
-                submodules=LinearRNNSubmodules(
-                    q_proj=nn.Linear,
-                    f_proj=nn.Linear,
-                    i_proj=nn.Linear,
-                    core_linear_rnn=HGRN2,
-                    o_proj=nn.Linear,
+        module=HybridTransformerBlock,
+        submodules=HybridTransformerBlockSubmodules(
+            linear_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=LinearRNN,
+                        # params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=LinearRNNSubmodules(
+                            q_proj=nn.Linear,
+                            f_proj=nn.Linear,
+                            i_proj=nn.Linear,
+                            core_linear_rnn=HGRN2,
+                            o_proj=nn.Linear,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
                 ),
             ),
-            self_attn_bda=get_bias_dropout_add,
-            pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
-            mlp=mlp,
-            mlp_dense=mlp_dense,
-            mlp_bda=get_bias_dropout_add,
+            normal_transformer_layer=ModuleSpec(
+                module=TransformerLayer,
+                submodules=TransformerLayerSubmodules(
+                    self_attention=ModuleSpec(
+                        module=SelfAttention,
+                        params={"attn_mask_type": AttnMaskType.causal},
+                        submodules=SelfAttentionSubmodules(
+                            linear_q_proj=ColumnParallelLinear,
+                            linear_q_a_proj=ColumnParallelLinear,
+                            linear_q_b_proj=ColumnParallelLinear,
+                            linear_kv_a_proj_with_mqa=ColumnParallelLinear,
+                            linear_kv_b_proj=ColumnParallelLinear,
+                            linear_proj=RowParallelLinear,
+                            q_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            kv_a_layernorm=DeepseekV2RMSNorm if qk_layernorm else IdentityOp,
+                            core_attention=DotProductAttention,
+                        ),
+                    ),
+                    self_attn_bda=get_bias_dropout_add,
+                    pre_mlp_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    input_layernorm=DeepseekV2RMSNorm if num_experts else IdentityOp,
+                    mlp=mlp,
+                    mlp_dense=mlp_dense,
+                    mlp_bda=get_bias_dropout_add,
+                ),
+            ),
         ),
     )
 
