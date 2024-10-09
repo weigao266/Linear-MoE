@@ -12,11 +12,11 @@ export HF_ENDPOINT=https://hf-mirror.com
 ENV=dsw
 MODEL_SIZE=A1B
 BATCH_SIZE=1
-GLOBAL_BATCH_SIZE=8
+GLOBAL_BATCH_SIZE=2
 LR=1e-5
 MIN_LR=1e-6
-SEQ_LEN=2048
-PAD_LEN=2048
+SEQ_LEN=128
+PAD_LEN=128
 PR=bf16
 TP=1
 PP=1
@@ -33,10 +33,14 @@ TRAIN_TOKENS=100000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="hgrn2"
+LA_MODULE="gla"
 BASE_MODEL="qwen2"
-HYBRID_ATTENTION_RATIO=0.0
-HYBRID_MLP_RATIO=0.0
+LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
+# LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+
+# Only for Mamba2
+HYBRID_ATTENTION_RATIO=0.2
+HYBRID_MLP_RATIO=0.2
 
 # # SSM
 # linear_moe_options=" \
@@ -45,25 +49,27 @@ HYBRID_MLP_RATIO=0.0
 #         --base-model ${BASE_MODEL} \
 #         "
 
-# # Linear Attention
+# Linear Attention
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --la-mode chunk \
+        --base-model ${BASE_MODEL} \
+        --la-feature-map swish \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
+        "
+
+# # Linear RNN
 # linear_moe_options=" \
 #         --use-la-module \
 #         --la-module ${LA_MODULE} \
 #         --la-mode chunk \
 #         --base-model ${BASE_MODEL} \
-#         --la-feature-map swish \
 #         --la-output-norm rmsnorm \
 #         --la-gate-fn swish \
 #         "
-
-# Linear RNN
-linear_moe_options=" \
-        --la-module ${LA_MODULE} \
-        --la-mode chunk \
-        --base-model ${BASE_MODEL} \
-        --la-output-norm rmsnorm \
-        --la-gate-fn swish \
-        "
 
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1
