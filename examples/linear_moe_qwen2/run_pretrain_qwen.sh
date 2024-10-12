@@ -35,8 +35,8 @@ OUTPUT_BASEPATH=./output
 
 LA_MODULE="gla"
 BASE_MODEL="qwen2"
-LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
-# LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
+LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
 
 # Only for Mamba2
 HYBRID_ATTENTION_RATIO=0.2
@@ -45,6 +45,7 @@ HYBRID_MLP_RATIO=0.2
 # # SSM
 # linear_moe_options=" \
 #         --use-la-module \
+#         --use-cache \
 #         --la-module ${LA_MODULE} \
 #         --base-model ${BASE_MODEL} \
 #         "
@@ -52,6 +53,7 @@ HYBRID_MLP_RATIO=0.2
 # Linear Attention
 linear_moe_options=" \
         --use-la-module \
+        --use-cache \
         --la-module ${LA_MODULE} \
         --la-mode chunk \
         --base-model ${BASE_MODEL} \
@@ -64,6 +66,7 @@ linear_moe_options=" \
 # # Linear RNN
 # linear_moe_options=" \
 #         --use-la-module \
+#         --use-cache \
 #         --la-module ${LA_MODULE} \
 #         --la-mode chunk \
 #         --base-model ${BASE_MODEL} \

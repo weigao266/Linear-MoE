@@ -35,6 +35,7 @@ OUTPUT_BASEPATH=./output
 # # SSM
 # linear_moe_options=" \
 #         --use-la-module \
+#         --use-cache \
 #         --la-module pure_mamba2 \
 #         --base-model deepseekv2 \
 #         "
@@ -42,6 +43,7 @@ OUTPUT_BASEPATH=./output
 # Linear Attention
 linear_moe_options=" \
         --use-la-module \
+        --use-cache \
         --la-module deltanet \
         --la-mode chunk \
         --base-model deepseekv2 \
@@ -53,6 +55,7 @@ linear_moe_options=" \
 # # Linear RNN
 # linear_moe_options=" \
 #         --use-la-module \
+#         --use-cache \
 #         --la-module rwkv6 \
 #         --la-mode chunk \
 #         --base-model deepseekv2 \

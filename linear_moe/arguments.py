@@ -465,6 +465,13 @@ def get_patch_args(parser):
         ('If True, use la module.'),
     )
 
+    group.add_argument(
+        '--use-cache',
+        action='store_true',
+        help=
+        ('If True, use cache in lsm modules.'),
+    )
+
     group.add_argument('--la-module',
                        type=str,
                        default='mamba2')
