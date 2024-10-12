@@ -31,6 +31,7 @@ from linear_moe.model.qwen2.layer_specs import (
     get_hybrid_retention_linear_moe_layer_local_spec,
     get_hybrid_based_linear_moe_layer_local_spec,
     get_hybrid_rebased_linear_moe_layer_local_spec,
+    get_pure_mamba2_stack_linear_moe_layer_local_spec,
     get_hybrid_mamba2_stack_linear_moe_layer_local_spec,
     get_hybrid_basic_linear_attention_linear_moe_layer_local_spec,
     get_hybrid_gla_linear_moe_layer_local_spec,
@@ -62,6 +63,8 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
     if args.use_la_module:
         if args.la_module == "mamba2":
             mamba_stack_spec = get_hybrid_mamba2_stack_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "pure_mamba2":
+            mamba_stack_spec = get_pure_mamba2_stack_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "retention":
             hybrid_transformer_layer_spec = get_hybrid_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "based":
@@ -86,7 +89,7 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
 
     if args.use_la_module:
-        if args.la_module in ["mamba2"]:
+        if args.la_module in ["mamba2", "pure_mamba2"]:
             model = MambaModel(
                 config=config,
                 mamba_stack_spec=mamba_stack_spec,

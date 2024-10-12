@@ -33,14 +33,16 @@ TRAIN_TOKENS=100000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="gla"
+LA_MODULE="pure_mamba2"
 BASE_MODEL="qwen2"
-LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
-# LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
 
-# Only for Mamba2
-HYBRID_ATTENTION_RATIO=0.2
-HYBRID_MLP_RATIO=0.2
+# for models except mamba2
+# LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
+LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+
+# only for hybrid_mamba2, when train pure_mamba2, set them to 0.0
+HYBRID_ATTENTION_RATIO=0.0
+HYBRID_MLP_RATIO=0.0
 
 # # SSM
 # linear_moe_options=" \
@@ -53,7 +55,7 @@ HYBRID_MLP_RATIO=0.2
 linear_moe_options=" \
         --use-la-module \
         --la-module ${LA_MODULE} \
-        --la-mode chunk \
+        --la-mode fused_chunk \
         --base-model ${BASE_MODEL} \
         --la-feature-map swish \
         --la-output-norm rmsnorm \
