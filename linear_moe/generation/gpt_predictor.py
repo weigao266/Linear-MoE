@@ -16,10 +16,10 @@ import json
 import torch
 
 from megatron.core.enums import ModelType
-from megatron import get_args
-from megatron import get_timers
+from megatron.training import get_args
+from megatron.training import get_timers
 from megatron.training import get_model
-from megatron.checkpointing import load_checkpoint
+from megatron.training.checkpointing import load_checkpoint
 
 from linear_moe.generation.api import generate_and_post_process
 from linear_moe.tokenizer import build_tokenizer

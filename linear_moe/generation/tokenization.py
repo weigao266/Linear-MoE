@@ -14,9 +14,9 @@
 
 import torch
 
-from megatron import get_args
-from megatron.text_generation.communication import broadcast_int_list
-from megatron.text_generation.communication import broadcast_tensor
+from megatron.training import get_args
+from megatron.inference.text_generation.communication import broadcast_int_list
+from megatron.inference.text_generation.communication import broadcast_tensor
 
 from linear_moe.tokenizer import get_tokenizer
 

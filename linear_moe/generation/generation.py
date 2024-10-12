@@ -15,15 +15,15 @@
 import torch
 import torch.nn.functional as F
 
-from megatron import get_args
+from megatron.training import get_args
 from megatron.core import mpu
-from megatron.text_generation.beam_utils import BeamHypotheses
-from megatron.text_generation.communication import broadcast_from_last_pipeline_stage
-from megatron.text_generation.communication import broadcast_from_last_to_first_pipeline_stage
-from megatron.text_generation.communication import copy_from_last_to_first_pipeline_stage
-from megatron.text_generation.forward_step import ForwardStep
-from megatron.text_generation.sampling import sample
-from megatron.utils import get_ltor_masks_and_position_ids
+from megatron.inference.text_generation.beam_utils import BeamHypotheses
+from megatron.inference.text_generation.communication import broadcast_from_last_pipeline_stage
+from megatron.inference.text_generation.communication import broadcast_from_last_to_first_pipeline_stage
+from megatron.inference.text_generation.communication import copy_from_last_to_first_pipeline_stage
+from megatron.inference.text_generation.forward_step import ForwardStep
+from megatron.inference.text_generation.sampling import sample
+from megatron.training.utils import get_ltor_masks_and_position_ids
 
 from linear_moe.tokenizer import get_tokenizer
 
