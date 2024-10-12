@@ -10,3 +10,6 @@
 [submodule "third_party/LM-Evaluation-Harness"]
 	path = third_party/LM-Evaluation-Harness
 	url = https://github.com/jerryli1981/lm-evaluation-harness.git
+[submodule "third_party/opencompass"]
+	path = third_party/opencompass
+	url = https://github.com/open-compass/opencompass.git

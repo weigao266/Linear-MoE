@@ -15,7 +15,7 @@
 import torch
 
 from megatron.core import mpu
-from megatron.text_generation.communication import broadcast_float_list
+from megatron.inference.text_generation.communication import broadcast_float_list
 from .generation import beam_search_and_return_on_first_stage
 from .generation import generate_tokens_probs_and_return_on_first_stage
 from .generation import score_and_return_on_first_stage
