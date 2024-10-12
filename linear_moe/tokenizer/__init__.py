@@ -205,6 +205,12 @@ def build_tokenizer(args):
             def detokenize(self, token_ids):
                 return self.tokenizer.decode(token_ids)
 
+            def encode(self, text):
+                return self.tokenizer.encode(text)
+
+            def decode(self, token_ids):
+                return self.tokenizer.decode(token_ids)
+
             @property
             def eod(self):
                 return self.tokenizer.eos_token_id

@@ -16,7 +16,9 @@ import sys
 from functools import partial
 import torch
 
-from megatron.training import get_args, get_num_microbatches
+# from megatron.training import get_args, get_num_microbatches
+from megatron.training import get_args
+from megatron.core.num_microbatches_calculator import get_num_microbatches
 from megatron.training import print_rank_0
 from megatron.training import get_timers
 from megatron.core import mpu
