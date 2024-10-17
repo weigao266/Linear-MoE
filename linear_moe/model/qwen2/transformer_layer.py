@@ -199,6 +199,7 @@ class TransformerLayer(MegatronModule, BaseTransformerLayer):
             attention_output_with_bias = self.self_attention(
                 input_layernorm_output,
                 attention_mask=attention_mask,
+                inference_params=inference_params,
                 rotary_pos_emb=rotary_pos_emb,
                 packed_seq_params=packed_seq_params,
             )
