@@ -4,23 +4,26 @@ set -e
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 LINEAR_MOE_PATH=$( dirname $( dirname ${CURRENT_DIR}))
 MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0
+FLA_PATH=${LINEAR_MOE_PATH}/third_party/flash-linear-attention-1018
 echo $MEGATRON_PATH
+echo $FLA_PATH
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
+export PYTHONPATH=${FLA_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export HF_ENDPOINT=https://hf-mirror.com
 
 ENV=dsw
-MODEL_SIZE=A1B
+MODEL_SIZE=A0.3B
 BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=2
-LR=1e-5
-MIN_LR=1e-6
+LR=1e-4
+MIN_LR=1e-5
 SEQ_LEN=128
 PAD_LEN=128
 PR=bf16
 TP=1
 PP=1
-EP=2
+EP=1
 AC=sel
 DO=true
 FL=false
@@ -29,16 +32,16 @@ TE=false
 SAVE_INTERVAL=100000
 DATASET_PATH=/cpfs01/user/sunweigao/my/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
 PRETRAIN_CHECKPOINT_PATH=Qwen/Qwen2-0.5B
-TRAIN_TOKENS=100000000000
+TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="pure_mamba2"
+LA_MODULE="rwkv6"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
-# LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
-LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLNLLLNLLLN"
+LAYER_TYPE_LIST="LLLLLLLLLLLL"
 
 # only for hybrid_mamba2, when train pure_mamba2, set them to 0.0
 HYBRID_ATTENTION_RATIO=0.0
@@ -51,27 +54,28 @@ HYBRID_MLP_RATIO=0.0
 #         --base-model ${BASE_MODEL} \
 #         "
 
-# Linear Attention
-linear_moe_options=" \
-        --use-la-module \
-        --la-module ${LA_MODULE} \
-        --la-mode fused_chunk \
-        --base-model ${BASE_MODEL} \
-        --la-feature-map swish \
-        --la-output-norm rmsnorm \
-        --la-gate-fn swish \
-        --layer-type-list ${LAYER_TYPE_LIST} \
-        "
-
-# # Linear RNN
+# # Linear Attention
 # linear_moe_options=" \
 #         --use-la-module \
 #         --la-module ${LA_MODULE} \
-#         --la-mode chunk \
+#         --la-mode fused_chunk \
 #         --base-model ${BASE_MODEL} \
+#         --la-feature-map swish \
 #         --la-output-norm rmsnorm \
 #         --la-gate-fn swish \
+#         --layer-type-list ${LAYER_TYPE_LIST} \
 #         "
+
+# Linear RNN
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --la-mode chunk \
+        --base-model ${BASE_MODEL} \
+        --la-output-norm groupnorm \
+        --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
+        "
 
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1
@@ -178,6 +182,31 @@ EXTRA_VOCAB_SIZE=421
 
 moe_options=" \
             "
+
+elif [ $MODEL_SIZE = A0.3B ]; then
+
+HIDDEN_SIZE=1024
+INTERMEDIATE_SIZE=896
+MAX_POSITION_EMBEDDINGS=131072
+MAX_WINDOW_LAYERS=12
+MOE_INTERMEDIATE_SIZE=896
+NUM_ATTENTION_HEADS=8
+NUM_EXPERTS=64
+NUM_EXPERTS_PER_TOPK=8
+NUM_HIDDEN_LAYERS=12
+NUM_KEY_VALUE_HEADS=8
+RMS_NORM_EPS=1e-6
+ROPE_THETA=10000
+SHARED_EXPERT_INTERMEDIATE_SIZE=0
+SLIDING_WINDOW=131072
+EXTRA_VOCAB_SIZE=293
+
+moe_options=" \
+            --moe-router-topk ${NUM_EXPERTS_PER_TOPK} \
+            --num-experts ${NUM_EXPERTS} \
+            --expert-model-parallel-size ${EP}\
+            --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+            --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE}"
 
 elif [ $MODEL_SIZE = A1B ]; then
 
