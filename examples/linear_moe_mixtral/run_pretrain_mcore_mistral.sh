@@ -35,6 +35,7 @@ OUTPUT_BASEPATH=./output
 # # SSM
 # linear_moe_options=" \
 #         --use-la-module \
+#         --use-cache \
 #         --la-module pure_mamba2 \
 #         --base-model mixtral \
 #         "
@@ -42,6 +43,7 @@ OUTPUT_BASEPATH=./output
 # Linear Attention
 linear_moe_options=" \
         --use-la-module \
+        --use-cache \
         --la-module deltanet \
         --la-mode chunk \
         --base-model mixtral \
@@ -53,6 +55,7 @@ linear_moe_options=" \
 # # Linear RNN
 # linear_moe_options=" \
 #         --use-la-module \
+#         --use-cache \
 #         --la-module rwkv6 \
 #         --la-mode chunk \
 #         --base-model mixtral \
@@ -282,11 +285,6 @@ eval ${run_cmd}
 set +x
 
 # note
-
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module retention \
-#         "
 
 # 在使用layer_specs.py中FusedLayerNorm时，这里的--normalization必须设为LayerNorm，否则报错
 # --normalization RMSNorm \

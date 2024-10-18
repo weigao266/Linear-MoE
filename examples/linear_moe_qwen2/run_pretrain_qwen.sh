@@ -50,6 +50,7 @@ HYBRID_MLP_RATIO=0.0
 # # SSM
 # linear_moe_options=" \
 #         --use-la-module \
+#         --use-cache \
 #         --la-module ${LA_MODULE} \
 #         --base-model ${BASE_MODEL} \
 #         "
@@ -69,6 +70,7 @@ HYBRID_MLP_RATIO=0.0
 # Linear RNN
 linear_moe_options=" \
         --use-la-module \
+        --use-cache \
         --la-module ${LA_MODULE} \
         --la-mode chunk \
         --base-model ${BASE_MODEL} \
