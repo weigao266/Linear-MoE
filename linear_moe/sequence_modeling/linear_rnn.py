@@ -147,6 +147,7 @@ class LinearRNN(MegatronModule):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        inference_params=None,
         rotary_pos_emb=None,
         packed_seq_params=None,
         lower_bound: Optional[torch.Tensor] = None,
