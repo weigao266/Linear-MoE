@@ -41,9 +41,9 @@ from linear_moe.sequence_modeling.deltanet import DeltaNet
 from linear_moe.sequence_modeling.rwkv6 import DDLerpLinear
 from linear_moe.sequence_modeling.rwkv6 import RWKV6
 from linear_moe.sequence_modeling.hgrn2 import HGRN2
-# from linear_moe.sequence_modeling.ssm import MambaStack, MambaStackSubmodules
-# from linear_moe.sequence_modeling.mamba2.mamba_layer import MambaLayer, MambaLayerSubmodules
-# from linear_moe.sequence_modeling.mamba2.mamba_mixer import MambaMixer, MambaMixerSubmodules
+from linear_moe.sequence_modeling.ssm import MambaStack, MambaStackSubmodules
+from linear_moe.sequence_modeling.mamba2.mamba_layer import MambaLayer, MambaLayerSubmodules
+from linear_moe.sequence_modeling.mamba2.mamba_mixer import MambaMixer, MambaMixerSubmodules
 
 from .transformer.mlp import MLP, MLPSubmodules
 from .transformer.attention import SelfAttention, SelfAttentionSubmodules
@@ -134,58 +134,7 @@ def get_gpt_layer_local_spec(num_experts: int = None, moe_grouped_gemm: bool = F
     )
 
 
-def get_pure_mamba2_stack_linear_moe_layer_local_spec(
-    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
-) -> ModuleSpec:
-    mlp = _get_mlp_module_spec(
-        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
-    )
-    return ModuleSpec(
-        module=MambaStack,
-        submodules=MambaStackSubmodules(
-            mamba_layer=ModuleSpec(
-                module=MambaLayer,
-                submodules=MambaLayerSubmodules(
-                    mixer=ModuleSpec(
-                        module=MambaMixer,
-                        submodules=MambaMixerSubmodules(
-                            in_proj=TELayerNormColumnParallelLinear,
-                            out_proj=TERowParallelLinear,
-                        ),
-                    ),
-                    mamba_bda=get_bias_dropout_add,
-                ),
-            ),
-            # Started with spec from gpt_layer_specs.py
-            # Using the TE spec because we had problems getting the non-TE spec
-            # working
-            # swg: uncomment this to use dense mlp_layer
-            # mlp_layer=ModuleSpec(
-            #     module=TransformerLayer,
-            #     submodules=TransformerLayerSubmodules(
-            #         mlp=ModuleSpec(
-            #             module=MLP,
-            #             submodules=MLPSubmodules(
-            #                 linear_fc1=TELayerNormColumnParallelLinear,
-            #                 linear_fc2=TERowParallelLinear,
-            #             ),
-            #         ),
-            #         mlp_bda=get_bias_dropout_add,
-            #     ),
-            # ),
-            # swg: uncomment this to use moe mlp_layer
-            mlp_layer=ModuleSpec(
-                module=TransformerLayer,
-                submodules=TransformerLayerSubmodules(
-                    mlp=mlp,
-                    mlp_bda=get_bias_dropout_add,
-                ),
-            ),
-        ),
-    )
-
-
-def get_hybrid_mamba2_stack_linear_moe_layer_local_spec(
+def get_hybrid_mamba2_linear_moe_layer_local_spec(
     num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
 ) -> ModuleSpec:
     mlp = _get_mlp_module_spec(

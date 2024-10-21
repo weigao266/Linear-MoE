@@ -32,7 +32,7 @@ from linear_moe.model.deepseek_v2.layer_specs import (
     get_hybrid_retention_linear_moe_layer_local_spec,
     get_hybrid_based_linear_moe_layer_local_spec,
     get_hybrid_rebased_linear_moe_layer_local_spec,
-    get_hybrid_mamba2_stack_linear_moe_layer_local_spec,
+    get_hybrid_mamba2_linear_moe_layer_local_spec,
     get_hybrid_basic_linear_attention_linear_moe_layer_local_spec,
     get_hybrid_gla_linear_moe_layer_local_spec,
     get_hybrid_deltanet_linear_moe_layer_local_spec,
@@ -70,7 +70,7 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
 
     if args.use_la_module:
         if args.la_module == "mamba2":
-            mamba_stack_spec = get_hybrid_mamba2_stack_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
+            mamba_stack_spec = get_hybrid_mamba2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
         elif args.la_module == "retention":
             hybrid_transformer_layer_spec = get_hybrid_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
         elif args.la_module == "based":

@@ -36,24 +36,23 @@ TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="rwkv6"
+LA_MODULE="mamba2"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
 # LAYER_TYPE_LIST="LLLNLLLNLLLN"
 LAYER_TYPE_LIST="LLLLLLLLLLLL"
 
-# only for hybrid_mamba2, when train pure_mamba2, set them to 0.0
+# for only mamba2, including prue mamba2 and hybrid mamba2
 HYBRID_ATTENTION_RATIO=0.0
-HYBRID_MLP_RATIO=0.0
+HYBRID_MLP_RATIO=0.5
 
-# # SSM
-# linear_moe_options=" \
-#         --use-la-module \
-#         --use-cache \
-#         --la-module ${LA_MODULE} \
-#         --base-model ${BASE_MODEL} \
-#         "
+# SSM
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --base-model ${BASE_MODEL} \
+        "
 
 # # Linear Attention
 # linear_moe_options=" \
@@ -67,17 +66,16 @@ HYBRID_MLP_RATIO=0.0
 #         --layer-type-list ${LAYER_TYPE_LIST} \
 #         "
 
-# Linear RNN
-linear_moe_options=" \
-        --use-la-module \
-        --use-cache \
-        --la-module ${LA_MODULE} \
-        --la-mode chunk \
-        --base-model ${BASE_MODEL} \
-        --la-output-norm groupnorm \
-        --la-gate-fn swish \
-        --layer-type-list ${LAYER_TYPE_LIST} \
-        "
+# # Linear RNN
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --la-mode chunk \
+#         --base-model ${BASE_MODEL} \
+#         --la-output-norm groupnorm \
+#         --la-gate-fn swish \
+#         --layer-type-list ${LAYER_TYPE_LIST} \
+#         "
 
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1

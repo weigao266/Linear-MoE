@@ -105,6 +105,7 @@ class MambaStack(MegatronModule):
             self.hybrid_mlp_ratio,
             self.hybrid_override_pattern,
         )
+        print("Mamba stack layers:", layer_type_list)
 
         pp_layer_offset = 0
         if parallel_state.get_pipeline_model_parallel_world_size() > 1:

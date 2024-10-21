@@ -47,8 +47,7 @@ from linear_moe.model.mixtral.layer_specs import (
     get_retention_linear_moe_layer_local_spec,
     get_based_linear_moe_layer_local_spec,
     get_rebased_linear_moe_layer_local_spec,
-    get_pure_mamba2_stack_linear_moe_layer_local_spec,
-    get_hybrid_mamba2_stack_linear_moe_layer_local_spec,
+    get_hybrid_mamba2_linear_moe_layer_local_spec,
     get_basic_linear_attention_linear_moe_layer_local_spec,
     get_gla_linear_moe_layer_local_spec,
     get_rwkv6_linear_moe_layer_local_spec,
@@ -67,10 +66,8 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
     config = core_transformer_config_from_args(args, MixtralTransformerConfig)
 
     if args.use_la_module:
-        if args.la_module == "pure_mamba2":
-            mamba_stack_spec = get_pure_mamba2_stack_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
-        if args.la_module == "hybrid_mamba2":
-            mamba_stack_spec = get_hybrid_mamba2_stack_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+        if args.la_module == "mamba2":
+            mamba_stack_spec = get_hybrid_mamba2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
         elif args.la_module == "retention":
             transformer_layer_spec = get_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
         elif args.la_module == "based":
@@ -90,7 +87,7 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
     else:
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
 
-    if args.la_module in ["pure_mamba2", "hybrid_mamba2"]:
+    if args.la_module in ["mamba2"]:
         model = MambaModel(
             config=config,
             mamba_stack_spec=mamba_stack_spec,

@@ -133,7 +133,7 @@ def get_gpt_layer_local_spec(
     )
 
 
-def get_hybrid_mamba2_stack_linear_moe_layer_local_spec(
+def get_hybrid_mamba2_linear_moe_layer_local_spec(
     num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
 ) -> ModuleSpec:
     mlp = _get_mlp_module_spec(

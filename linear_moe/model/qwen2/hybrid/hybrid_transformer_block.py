@@ -98,6 +98,7 @@ class HybridTransformerBlock(MegatronModule):
     ):
         super().__init__(config=config)
 
+        self.config = config
         self.submodules = submodules
         self.post_layer_norm = post_layer_norm
         self.pre_process = pre_process
