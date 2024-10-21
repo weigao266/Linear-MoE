@@ -177,6 +177,7 @@ def get_hybrid_mamba2_linear_moe_layer_local_spec(
             mlp_layer=ModuleSpec(
                 module=TransformerLayer,
                 submodules=TransformerLayerSubmodules(
+                    pre_mlp_layernorm=Qwen2RMSNorm,
                     mlp=mlp,
                     mlp_bda=get_bias_dropout_add,
                 ),

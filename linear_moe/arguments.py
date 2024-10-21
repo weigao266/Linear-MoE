@@ -472,6 +472,13 @@ def get_patch_args(parser):
         ('If True, use cache in lsm modules.'),
     )
 
+    group.add_argument(
+        '--megatron-hybrid-mamba-method',
+        action='store_true',
+        help=
+        ('If True, use the hybrid mamba method from Megatron-LM.'),
+    )
+
     group.add_argument('--la-module',
                        type=str,
                        default='mamba2')

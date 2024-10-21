@@ -43,9 +43,14 @@ BASE_MODEL="qwen2"
 # LAYER_TYPE_LIST="LLLNLLLNLLLN"
 LAYER_TYPE_LIST="LLLLLLLLLLLL"
 
-# for only mamba2, including prue mamba2 and hybrid mamba2
-HYBRID_ATTENTION_RATIO=0.0
-HYBRID_MLP_RATIO=0.5
+# for only mamba2, MLP layers are fixed behind mamba or attention layers. M: mamba layer, *: attention layer
+# for pure_mamba2
+HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
+# for hybrid_mamba2
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*"
+
+# # Turn on --megatron-hybrid-mamba-method to use the logic in Megatron-LM.
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-"
 
 # SSM
 linear_moe_options=" \
@@ -407,8 +412,7 @@ megatron_options="  \
         --rotary-base ${ROPE_THETA} \
         --rotary-seq-len-interpolation-factor 1 \
         --no-create-attention-mask-in-dataloader \
-        --hybrid-attention-ratio ${HYBRID_ATTENTION_RATIO} \
-        --hybrid-mlp-ratio ${HYBRID_MLP_RATIO} \
+        --hybrid-override-pattern ${HYBRID_OVERRIDE_PATTERN} \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py

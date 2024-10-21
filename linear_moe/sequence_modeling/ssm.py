@@ -114,26 +114,47 @@ class MambaStack(MegatronModule):
             )
 
         self.layers = nn.ModuleList()
-        for i, layer_type in enumerate(layer_type_list):
-            if layer_type == LayerSymbols.MAMBA:
-                layer = build_module(
-                    submodules.mamba_layer,
-                    config=self.config,
-                    mamba_ssm_ngroups=mamba_ssm_ngroups,
-                    residual_in_fp32=residual_in_fp32,
-                    layer_number=i + 1 + pp_layer_offset,
-                )
-            elif layer_type == LayerSymbols.ATTENTION:
-                # Transformer layers apply their own pp_layer_offset
-                layer = build_module(
-                    submodules.attention_layer, config=self.config, layer_number=i + 1
-                )
-            elif layer_type == LayerSymbols.MLP:
-                # Transformer layers apply their own pp_layer_offset
-                layer = build_module(submodules.mlp_layer, config=self.config, layer_number=i + 1)
-            else:
-                assert True, "unexpected layer_type"
-            self.layers.append(layer)
+        if self.config.megatron_hybrid_mamba_method:
+            for i, layer_type in enumerate(layer_type_list):
+                if layer_type == LayerSymbols.MAMBA:
+                    layer = build_module(
+                        submodules.mamba_layer,
+                        config=self.config,
+                        mamba_ssm_ngroups=mamba_ssm_ngroups,
+                        residual_in_fp32=residual_in_fp32,
+                        layer_number=i + 1 + pp_layer_offset,
+                    )
+                elif layer_type == LayerSymbols.ATTENTION:
+                    # Transformer layers apply their own pp_layer_offset
+                    layer = build_module(
+                        submodules.attention_layer, config=self.config, layer_number=i + 1
+                    )
+                elif layer_type == LayerSymbols.MLP:
+                    # Transformer layers apply their own pp_layer_offset
+                    layer = build_module(submodules.mlp_layer, config=self.config, layer_number=i + 1)
+                else:
+                    assert True, "unexpected layer_type"
+                self.layers.append(layer)
+        else:
+            for i, layer_type in enumerate(layer_type_list):
+                if layer_type == LayerSymbols.MAMBA:
+                    layer = build_module(
+                        submodules.mamba_layer,
+                        config=self.config,
+                        mamba_ssm_ngroups=mamba_ssm_ngroups,
+                        residual_in_fp32=residual_in_fp32,
+                        layer_number=i + 1 + pp_layer_offset,
+                    )
+                elif layer_type == LayerSymbols.ATTENTION:
+                    # Transformer layers apply their own pp_layer_offset
+                    layer = build_module(
+                        submodules.attention_layer, config=self.config, layer_number=i + 1
+                    )
+                else:
+                    assert True, "unexpected layer_type"
+                self.layers.append(layer)
+                fixed_mlp_layer = build_module(submodules.mlp_layer, config=self.config, layer_number=i + 1)
+                self.layers.append(fixed_mlp_layer)
 
         # Required for activation recomputation
         self.num_layers_per_pipeline_rank = len(self.layers)

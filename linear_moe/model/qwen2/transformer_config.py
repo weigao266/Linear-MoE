@@ -40,6 +40,8 @@ class Qwen2TransformerConfig(TransformerConfig):
 
     use_la_module: bool = False
 
+    megatron_hybrid_mamba_method: bool = False
+
     la_module: str = None
 
     la_mode: str = None
