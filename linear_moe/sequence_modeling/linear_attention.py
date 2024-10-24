@@ -107,7 +107,7 @@ class LinearAttention(MegatronModule):
             self.config.hidden_size,
             config=self.config,
             init_method=self.config.output_layer_init_method,
-            bias=self.config.add_bias_linear,
+            bias=self.config.add_bias_linear, # false
             input_is_parallel=True,
             skip_bias_add=True,
             is_expert=False,

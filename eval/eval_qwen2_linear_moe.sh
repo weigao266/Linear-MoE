@@ -19,17 +19,12 @@ export MKL_THREADING_LAYER=GNU
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-CHECKPOINT_PATH=${LINEAR_MOE_PATH}/checkpoint/pretrain-mcore-pure_mamba2-qwen2-A1B-lr-1e-5-minlr-1e-6-bs-8-gbs-64-seqlen-2048-pr-bf16-tp-1-pp-1-ac-sel-do-true-sp-false-tt-100000000000-wt-10000 #$3
-MODEL_SIZE=A1B #$4  #7B, 13B, 70B
-TP=1 #$5
-BS=1 #$6
-SEQ_LEN=2048 #$7
-PAD_LEN=2048 #$8
+CHECKPOINT_PATH=${LINEAR_MOE_PATH}/checkpoint/pretrain-mcore-hgrn2-qwen2-A0.3B-lr-1e-4-minlr-1e-5-bs-8-gbs-64-seqlen-2048-pr-bf16-tp-1-pp-1-ac-sel-do-true-sp-false-tt-15000000000-wt-10000
+
 EXTRA_VOCAB_SIZE=293 #$9
 PR=bf16 #${10}
 TOP_K=10 #${11}
-INPUT_SEQ_LEN=2048 #${12}
-OUTPUT_SEQ_LEN=2048 #${13}
+
 INPUT_FILE=${LINEAR_MOE_PATH}/examples/linear_moe_qwen2/input_file.json #${14}
 OUTPUT_FILE=${LINEAR_MOE_PATH}/examples/linear_moe_qwen2/output_file.txt #${15}
 TOP_P=0 #${16}
@@ -38,7 +33,7 @@ TEMPERATURE=1.0 #${17}
 REPETITION_PENALTY=1.2 #${18}
 
 # ENV=dlc
-MODEL_SIZE=A1B
+MODEL_SIZE=A0.3B
 BATCH_SIZE=256
 GLOBAL_BATCH_SIZE=256
 LR=1e-5
@@ -61,17 +56,19 @@ TRAIN_TOKENS=100000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="pure_mamba2"
+LA_MODULE="hgrn2"
 BASE_MODEL="qwen2"
 HYBRID_ATTENTION_RATIO=0.0
 HYBRID_MLP_RATIO=0.0
 
+LAYER_TYPE_LIST="LLLLLLLLLLLL"
+
 # SSM
-linear_moe_options=" \
-        --use-la-module \
-        --la-module ${LA_MODULE} \
-        --base-model ${BASE_MODEL} \
-        "
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --base-model ${BASE_MODEL} \
+#         "
 
 # Linear Attention
 # linear_moe_options=" \
@@ -84,15 +81,16 @@ linear_moe_options=" \
 #         --la-gate-fn swish \
 #         "
 
-# # Linear RNN
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module ${LA_MODULE} \
-#         --la-mode chunk \
-#         --base-model ${BASE_MODEL} \
-#         --la-output-norm rmsnorm \
-#         --la-gate-fn swish \
-#         "
+# Linear RNN
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --la-mode chunk \
+        --base-model ${BASE_MODEL} \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
+        "
 
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0
@@ -199,6 +197,31 @@ EXTRA_VOCAB_SIZE=421
 
 moe_options=" \
             "
+
+elif [ $MODEL_SIZE = A0.3B ]; then
+
+HIDDEN_SIZE=1024
+INTERMEDIATE_SIZE=896
+MAX_POSITION_EMBEDDINGS=131072
+MAX_WINDOW_LAYERS=12
+MOE_INTERMEDIATE_SIZE=896
+NUM_ATTENTION_HEADS=8
+NUM_EXPERTS=64
+NUM_EXPERTS_PER_TOPK=8
+NUM_HIDDEN_LAYERS=12
+NUM_KEY_VALUE_HEADS=8
+RMS_NORM_EPS=1e-6
+ROPE_THETA=10000
+SHARED_EXPERT_INTERMEDIATE_SIZE=0
+SLIDING_WINDOW=131072
+EXTRA_VOCAB_SIZE=293
+
+moe_options=" \
+            --moe-router-topk ${NUM_EXPERTS_PER_TOPK} \
+            --num-experts ${NUM_EXPERTS} \
+            --expert-model-parallel-size ${EP}\
+            --moe-ffn-hidden-size ${MOE_INTERMEDIATE_SIZE} \
+            --shared-moe-ffn-hidden-size ${SHARED_EXPERT_INTERMEDIATE_SIZE}"
 
 elif [ $MODEL_SIZE = A1B ]; then
 
@@ -407,6 +430,7 @@ megatron_options="  \
         --untie-embeddings-and-output-weights \
         --disable-bias-linear \
         --add-qkv-bias \
+        --skip-bias-add \
         --group-query-attention \
         --num-query-groups ${NUM_KEY_VALUE_HEADS} \
         --rotary-percent 1.0 \
@@ -415,6 +439,7 @@ megatron_options="  \
         --no-create-attention-mask-in-dataloader \
         --hybrid-attention-ratio ${HYBRID_ATTENTION_RATIO} \
         --hybrid-mlp-ratio ${HYBRID_MLP_RATIO} \
+        --max-tokens-to-oom 500000 \
         "
 
 # rapidformer_options="  \
@@ -447,7 +472,7 @@ megatron_options="  \
 #         --disable-bias-linear
 #     "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS run.py configs/eval_qwen2_linear_moe_pure_mamba2.py -w outputs/qwen2_linear_moe --debug
+run_cmd="torchrun $DISTRIBUTED_ARGS run.py configs/eval_qwen2_linear_moe.py -w outputs/qwen2_linear_moe_hgrn2 --debug
  ${megatron_options} ${pr_options} ${load_options} ${input_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options} ${linear_moe_options}"
 
 echo ${run_cmd}

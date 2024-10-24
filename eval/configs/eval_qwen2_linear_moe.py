@@ -9,7 +9,7 @@ with read_base():
     from opencompass.configs.datasets.ARC_e.ARC_e_gen import ARC_e_datasets # ARC-easy
     from opencompass.configs.datasets.ARC_c.ARC_c_gen import ARC_c_datasets # ARC-challenge
 
-datasets = hellaswag_datasets
+datasets = winogrande_datasets
 
 from eval.models.qwen2_linear_moe import Qwen2LinearMoe
 

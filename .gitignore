@@ -167,8 +167,11 @@ Megatron-LM*
 LM-Evaluation-Harness*
 *.pyc
 output
+outputs
 checkpoint
 data-cache
 tensorboard
 log
 triton-cache
+data
+*.zip
