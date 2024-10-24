@@ -18,8 +18,8 @@ BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=2
 LR=1e-4
 MIN_LR=1e-5
-SEQ_LEN=128
-PAD_LEN=128
+SEQ_LEN=16384
+PAD_LEN=16384
 PR=bf16
 TP=1
 PP=1
@@ -36,7 +36,7 @@ TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="mamba2"
+LA_MODULE="hgrn2"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
@@ -52,12 +52,12 @@ HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
 # # Turn on --megatron-hybrid-mamba-method to use the logic in Megatron-LM.
 # HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-"
 
-# SSM
-linear_moe_options=" \
-        --use-la-module \
-        --la-module ${LA_MODULE} \
-        --base-model ${BASE_MODEL} \
-        "
+# # SSM
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --base-model ${BASE_MODEL} \
+#         "
 
 # # Linear Attention
 # linear_moe_options=" \
@@ -71,16 +71,16 @@ linear_moe_options=" \
 #         --layer-type-list ${LAYER_TYPE_LIST} \
 #         "
 
-# # Linear RNN
-# linear_moe_options=" \
-#         --use-la-module \
-#         --la-module ${LA_MODULE} \
-#         --la-mode chunk \
-#         --base-model ${BASE_MODEL} \
-#         --la-output-norm groupnorm \
-#         --la-gate-fn swish \
-#         --layer-type-list ${LAYER_TYPE_LIST} \
-#         "
+# Linear RNN
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --la-mode chunk \
+        --base-model ${BASE_MODEL} \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
+        "
 
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1
@@ -307,10 +307,12 @@ fi
 if [ $FL = true ]; then
     flash_options=" \
 		    --use-flash-attn"
+    export NVTE_FLASH_ATTN=1 NVTE_FUSED_ATTN=0
 
 elif [ $FL = false ]; then
     flash_options=" \
                     "
+    export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
 fi
 
 if [ $TE = true ]; then
