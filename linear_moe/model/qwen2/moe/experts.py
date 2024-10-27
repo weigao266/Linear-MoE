@@ -30,6 +30,8 @@ from megatron.core.tensor_parallel.utils import divide
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.moe import grouped_gemm_util as gg
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megablocks.layers.dmoe import ParallelDroplessMLP
+from megablocks.layers.moe import ParallelMLP
 
 from ..transformer.mlp import MLP, MLPSubmodules
 
@@ -269,3 +271,25 @@ class SequentialMLP(MegatronModule):
 
             sharded_state_dict.update(expert_state_dict)
         return sharded_state_dict
+
+
+class MemSavingParallelMLP(ParallelMLP):
+    def forward(self, x, expert_weights, top_experts):
+        in_shape = x.size()
+        # Compute the experts.
+        x, _ = self.forward_fn(x, expert_weights, top_experts)
+        x = x.view(in_shape)
+        if self.args.return_bias:
+            return x, self.bias
+        return x + self.bias
+
+
+class MemSavingParallelDroplessMLP(ParallelDroplessMLP):
+    def forward(self, x, expert_weights, top_experts):
+        in_shape = x.size()
+        # Compute the experts.
+        x, _ = self.forward_fn(x, expert_weights, top_experts)
+        x = x.view(in_shape)
+        if self.args.return_bias:
+            return x, self.bias
+        return x + self.bias

@@ -80,7 +80,8 @@ linear_moe_options=" \
         --la-output-norm rmsnorm \
         --la-gate-fn swish \
         --layer-type-list ${LAYER_TYPE_LIST} \
-        "
+        --moe-megablocks"
+        # --moe-grouped-gemm"
 
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1

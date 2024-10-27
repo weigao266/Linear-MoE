@@ -30,6 +30,9 @@ class Qwen2TransformerConfig(TransformerConfig):
 
     moe_layer_freq: int = None
 
+    moe_megablocks: bool = False
+    """When set to True, use Megablocks for MoE layer."""
+
     rotary_base: int = None
 
     rotary_scaling_factor: int = None
@@ -83,3 +86,9 @@ class Qwen2TransformerConfig(TransformerConfig):
     expand_v: float = 1.0
     
     layer_type_list: str = None
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if self.moe_megablocks and self.moe_grouped_gemm:
+            raise ValueError("moe_megablocks and moe_grouped_gemm cannot be both True.")

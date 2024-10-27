@@ -326,6 +326,9 @@ def get_patch_args(parser):
 
     group.add_argument('--moe', action='store_true')
 
+    group.add_argument('--moe-megablocks', action='store_true',
+                       help='When set to True, use Megablocks for MoE layer.')
+
     group.add_argument('--moe-topk', type=int, default=1,
                        help='moe-topk')
 

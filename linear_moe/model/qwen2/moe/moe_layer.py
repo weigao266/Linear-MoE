@@ -19,8 +19,14 @@ import torch.nn.functional as F
 from megatron.core import parallel_state, tensor_parallel
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megablocks.layers.arguments import Arguments as MegablocksArguments
 
-from .experts import GroupedMLP, SequentialMLP
+from .experts import (
+    GroupedMLP,
+    SequentialMLP,
+    MemSavingParallelMLP,
+    MemSavingParallelDroplessMLP,
+)
 from .router import TopKRouter
 from .token_dispatcher import (
     MoEAllGatherTokenDispatcher,
@@ -87,7 +93,33 @@ class MoELayer(BaseMoELayer):
             self.shared_expert = MLP(self.config, submodules, is_expert=False, is_shared_expert=True)
             self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
-        if self.config.moe_grouped_gemm:
+        if self.config.moe_megablocks:
+            mb_args = MegablocksArguments(
+                # ffn settings
+                hidden_size=self.config.hidden_size,
+                ffn_hidden_size=self.config.ffn_hidden_size,
+                bias=self.config.add_bias_linear,
+                return_bias=True,  # set to True for interface consistency
+                activation_fn=self.config.activation_func,
+                mlp_type="glu" if self.config.gated_linear_unit else "mlp",
+                mlp_impl="sparse",
+                # moe settings
+                moe_num_experts=self.config.num_moe_experts,
+                moe_top_k=self.config.moe_router_topk,
+                moe_capacity_factor=self.config.moe_expert_capacity_factor,
+                moe_expert_model_parallelism=self.config.expert_model_parallel_size > 1,
+                expert_parallel_group=parallel_state.get_expert_model_parallel_group(),
+                moe_loss_weight=0,  # set to 0 to disable aux loss calculation here
+                # dtype and device
+                fp16=self.config.fp16,
+                bf16=self.config.bf16,
+                device=torch.cuda.current_device(),
+            )
+            if self.config.moe_token_dropping:
+                self.experts = MemSavingParallelMLP(mb_args)
+            else:
+                self.experts = MemSavingParallelDroplessMLP(mb_args)
+        elif self.config.moe_grouped_gemm:
             self.experts = GroupedMLP(self.num_local_experts, self.config)
         else:
             assert isinstance(self.submodules, MLPSubmodules)
@@ -120,12 +152,16 @@ class MoELayer(BaseMoELayer):
         # process MoE
         def custom_forward(hidden_states):
             probs, indices = self.router(hidden_states)
-            (dispatched_input, tokens_per_expert) = self.token_dispatcher.token_permutation(
-                hidden_states, probs, indices
-            )
-            expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
-            output, mlp_bias = self.token_dispatcher.token_unpermutation(expert_output, mlp_bias)
-            return output, mlp_bias
+            if self.config.moe_megablocks:
+                # megablocks handles token permutation internally
+                expert_output, mlp_bias = self.experts(hidden_states, probs, indices)
+            else:
+                (dispatched_input, tokens_per_expert) = self.token_dispatcher.token_permutation(
+                    hidden_states, probs, indices
+                )
+                expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert)
+                expert_output, mlp_bias = self.token_dispatcher.token_unpermutation(expert_output, mlp_bias)
+            return expert_output, mlp_bias
 
         if self.moe_layer_recompute:
             output, mlp_bias = tensor_parallel.checkpoint(custom_forward, False, hidden_states)
