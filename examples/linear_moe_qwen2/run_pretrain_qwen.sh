@@ -36,7 +36,7 @@ TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="hgrn2"
+LA_MODULE="retention"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
@@ -59,29 +59,32 @@ HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
 #         --base-model ${BASE_MODEL} \
 #         "
 
-# # Linear Attention
+# Linear Attention
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --la-mode fused_chunk \
+        --base-model ${BASE_MODEL} \
+        --la-feature-map swish \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
+        "
+
+# # Linear RNN
 # linear_moe_options=" \
 #         --use-la-module \
 #         --la-module ${LA_MODULE} \
-#         --la-mode fused_chunk \
+#         --la-mode chunk \
 #         --base-model ${BASE_MODEL} \
-#         --la-feature-map swish \
 #         --la-output-norm rmsnorm \
 #         --la-gate-fn swish \
 #         --layer-type-list ${LAYER_TYPE_LIST} \
 #         "
 
-# Linear RNN
-linear_moe_options=" \
-        --use-la-module \
-        --la-module ${LA_MODULE} \
-        --la-mode chunk \
-        --base-model ${BASE_MODEL} \
-        --la-output-norm rmsnorm \
-        --la-gate-fn swish \
-        --layer-type-list ${LAYER_TYPE_LIST} \
-        --moe-megablocks"
-        # --moe-grouped-gemm"
+# add to linear_moe_options to enable megablocks
+# --moe-megablocks \
+# --moe-grouped-gemm \
 
 if [ $ENV = dsw ]; then
 export CUDA_VISIBLE_DEVICES=0,1
