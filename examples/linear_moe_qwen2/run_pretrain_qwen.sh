@@ -18,8 +18,8 @@ BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=2
 LR=1e-4
 MIN_LR=1e-5
-SEQ_LEN=16384
-PAD_LEN=16384
+SEQ_LEN=2048
+PAD_LEN=2048
 PR=bf16
 TP=1
 PP=1
@@ -30,7 +30,7 @@ FL=false
 SP=false
 TE=false
 SAVE_INTERVAL=100000
-DATASET_PATH=/cpfs01/user/sunweigao/my/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
+DATASET_PATH=/cpfs01/shared/public/sunweigao/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
 PRETRAIN_CHECKPOINT_PATH=Qwen/Qwen2-0.5B
 TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
@@ -40,17 +40,22 @@ LA_MODULE="retention"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
-# LAYER_TYPE_LIST="LLLNLLLNLLLN"
 LAYER_TYPE_LIST="LLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLNLLLNLLLN"
+# LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
 
 # for only mamba2, MLP layers are fixed behind mamba or attention layers. M: mamba layer, *: attention layer
 # for pure_mamba2
 HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
+# HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMMMMMM"
 # for hybrid_mamba2
 # HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*"
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*MMM*"
 
 # # Turn on --megatron-hybrid-mamba-method to use the logic in Megatron-LM.
 # HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-"
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-"
 
 # # SSM
 # linear_moe_options=" \
