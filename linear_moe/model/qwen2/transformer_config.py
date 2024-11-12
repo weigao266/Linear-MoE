@@ -33,6 +33,12 @@ class Qwen2TransformerConfig(TransformerConfig):
     moe_megablocks: bool = False
     """When set to True, use Megablocks for MoE layer."""
 
+    moe_train_capacity_factor: float = None
+
+    moe_eval_capacity_factor: float = None
+
+    moe_token_dropping: bool = False
+
     rotary_base: int = None
 
     rotary_scaling_factor: int = None
