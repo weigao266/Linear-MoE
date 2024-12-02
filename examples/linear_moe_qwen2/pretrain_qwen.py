@@ -35,6 +35,7 @@ from linear_moe.model.qwen2.layer_specs import (
     get_hybrid_basic_linear_attention_linear_moe_layer_local_spec,
     get_hybrid_gla_linear_moe_layer_local_spec,
     get_hybrid_deltanet_linear_moe_layer_local_spec,
+    get_hybrid_mixattention_linear_moe_layer_local_spec,
     get_hybrid_rwkv6_linear_moe_layer_local_spec,
     get_hybrid_hgrn2_linear_moe_layer_local_spec,
 )
@@ -74,6 +75,8 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             hybrid_transformer_layer_spec = get_hybrid_gla_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "deltanet":
             hybrid_transformer_layer_spec = get_hybrid_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "mixattention":
+            hybrid_transformer_layer_spec = get_hybrid_mixattention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "rwkv6":
             hybrid_transformer_layer_spec = get_hybrid_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "hgrn2":

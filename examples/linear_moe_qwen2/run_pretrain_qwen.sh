@@ -18,8 +18,8 @@ BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=2
 LR=1e-4
 MIN_LR=1e-5
-SEQ_LEN=2048
-PAD_LEN=2048
+SEQ_LEN=1024
+PAD_LEN=1024
 PR=bf16
 TP=1
 PP=1
@@ -29,7 +29,7 @@ DO=true
 FL=false
 SP=false
 TE=false
-MB=true
+MB=false
 TOKEN_DROPPING=false
 TRAIN_CAPACITY_FACTOR=1.25
 EVAL_CAPACITY_FACTOR=2.0
@@ -41,7 +41,7 @@ TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="retention"
+LA_MODULE="mixattention"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
@@ -75,7 +75,7 @@ linear_moe_options=" \
         --la-module ${LA_MODULE} \
         --la-mode fused_chunk \
         --base-model ${BASE_MODEL} \
-        --la-feature-map swish \
+        --la-feature-map elu \
         --la-output-norm rmsnorm \
         --la-gate-fn swish \
         --layer-type-list ${LAYER_TYPE_LIST} \
