@@ -18,12 +18,12 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ENV=dsw
 MODEL_SIZE=A0.3B
-BATCH_SIZE=16
-GLOBAL_BATCH_SIZE=32
+BATCH_SIZE=8
+GLOBAL_BATCH_SIZE=16
 LR=1e-4
 MIN_LR=1e-5
-SEQ_LEN=1024
-PAD_LEN=1024
+SEQ_LEN=2048
+PAD_LEN=2048
 PR=bf16
 TP=1
 PP=1
@@ -46,8 +46,9 @@ WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
 LA_MODULE="mixattention"
-MIX_TYPE='agent'
+MIX_TYPE='D'
 A_NUM=256
+A_POOLING=true
 BASE_MODEL="qwen2"
 
 # for models except mamba2
@@ -79,8 +80,8 @@ HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
 linear_moe_options=" \
         --use-la-module \
         --la-module ${LA_MODULE} \
-        --mix-type ${MIX_TYPE}\
-        --a-num ${A_NUM}\
+        --mix-type ${MIX_TYPE} \
+        --a-num ${A_NUM} \
         --la-mode fused_chunk \
         --base-model ${BASE_MODEL} \
         --la-feature-map elu \
@@ -88,6 +89,12 @@ linear_moe_options=" \
         --la-gate-fn swish \
         --layer-type-list ${LAYER_TYPE_LIST} \
         "
+
+if [ $A_POOLING = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --a-pooling \
+        "
+fi
 
 # # Linear RNN
 # linear_moe_options=" \

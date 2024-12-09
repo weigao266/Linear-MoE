@@ -18,8 +18,8 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ENV=dsw
 MODEL_SIZE=A0.3B
-BATCH_SIZE=16
-GLOBAL_BATCH_SIZE=32
+BATCH_SIZE=2
+GLOBAL_BATCH_SIZE=4
 LR=1e-4
 MIN_LR=1e-5
 SEQ_LEN=1024
@@ -45,9 +45,7 @@ TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="mixattention"
-MIX_TYPE='agent'
-A_NUM=256
+LA_MODULE="retention"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
@@ -79,8 +77,6 @@ HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
 linear_moe_options=" \
         --use-la-module \
         --la-module ${LA_MODULE} \
-        --mix-type ${MIX_TYPE}\
-        --a-num ${A_NUM}\
         --la-mode fused_chunk \
         --base-model ${BASE_MODEL} \
         --la-feature-map elu \
