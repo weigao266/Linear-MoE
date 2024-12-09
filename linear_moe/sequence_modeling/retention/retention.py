@@ -5,6 +5,7 @@ from typing import Optional
 from einops import rearrange
 from megatron.core.transformer.module import MegatronModule
 from transformers.activations import ACT2FN
+import torch.nn.functional as F
 
 from linear_moe.model.common_modules import RMSNorm
 from fla.ops.retention import (chunk_retention, fused_chunk_retention,
@@ -29,7 +30,12 @@ class Retention(MegatronModule):
         self.num_kv_groups = self.num_heads // self.num_kv_heads
         
         self.la_feature_map = config.la_feature_map
-        self.la_feature_map_fn = ACT2FN[self.la_feature_map] if self.la_feature_map is not None else None
+        if self.la_feature_map == 'elu':
+            def elu(x):
+                return F.elu(x) + 1
+            self.la_feature_map_fn = elu
+        else:
+            self.la_feature_map_fn = ACT2FN[self.la_feature_map] if self.la_feature_map is not None else None
 
         self.key_dim = int(config.hidden_size * expand_k)
         self.value_dim = int(config.hidden_size * expand_v)

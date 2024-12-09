@@ -488,6 +488,16 @@ def get_patch_args(parser):
     group.add_argument('--la-module',
                        type=str,
                        default='mamba2')
+    
+    group.add_argument('--mix-type',
+                       type=str,
+                       default=None)
+    
+    group.add_argument('--a-pooling', action='store_true')
+
+    group.add_argument('--a-num',
+                       type=int,
+                       default=None)
 
     group.add_argument('--la-mode',
                        type=str,

@@ -8,7 +8,8 @@ from megatron.core.transformer.module import MegatronModule
 from linear_moe.model.common_modules.feature_map import (DPFPFeatureMap, HadamardFeatureMap,
                                      HedgehogFeatureMap, T2RFeatureMap)
 from linear_moe.model.common_modules import RMSNorm
-from .mixattention_op import naive_mixattention_op
+from .mixattention_op import (naive_mixattention_op, naive_mixattention_op_A, 
+                              naive_mixattention_op_B, naive_mixattention_op_C, naive_mixattention_op_D)
 
 
 class MixAttention(MegatronModule):
@@ -89,11 +90,37 @@ class MixAttention(MegatronModule):
         else:
             raise NotImplementedError(f"Not supported output norm `{self.la_output_norm}`.")
         
-        self._la_impl = naive_mixattention_op
+        # set different type of mixattn
+        self.mix_type = config.mix_type
+        if self.mix_type == 'A':
+            self._la_impl = naive_mixattention_op_A
+        elif self.mix_type == 'B':
+            self._la_impl = naive_mixattention_op_B
+        elif self.mix_type == 'C':
+            self._la_impl = naive_mixattention_op_C
+        elif self.mix_type == 'D':
+            self._la_impl = naive_mixattention_op_D
+        else:
+            raise NotImplementedError
+
+        self.a_pooling = config.a_pooling
         
-        self.a_num = 256
-        pool_size = int(self.a_num ** 0.5)
-        self.pool = torch.nn.AdaptiveAvgPool2d(output_size=(pool_size, pool_size))
+        self.a_num = config.a_num # 256
+        self.a_pool = torch.nn.AdaptiveAvgPool1d(output_size=self.a_num)
+        self.a_proj = None
+        if not self.a_pooling:
+            self.a_proj = torch.nn.Linear(self.hidden_size, self.a_num)
+
+        # if self.mix_type == 'A' or self.mix_type == 'D':
+        #     # pool_size = int(self.a_num ** 0.5)
+        #     # self.pool = torch.nn.AdaptiveAvgPool2d(output_size=(pool_size, pool_size))
+        #     pool_size = self.a_num
+        #     self.a_pool = torch.nn.AdaptiveAvgPool1d(output_size=pool_size)
+        # elif self.mix_type == 'B' or self.mix_type == 'C':
+        #     # if self.a_num > self.head_qk_dim:
+        #     #     self.a_proj = torch.nn.Linear(self.head_qk_dim, self.a_num)
+        #     # else:
+        #     self.a_pool = torch.nn.AdaptiveAvgPool1d(output_size=self.a_num)
         
         self.apply(self._initialize_weights)
 
@@ -109,6 +136,7 @@ class MixAttention(MegatronModule):
 
     def forward(
         self,
+        x: torch.Tensor,
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
@@ -125,16 +153,7 @@ class MixAttention(MegatronModule):
         if self.la_norm_k:
             k = k / (k.sum(-1, True) + 1e-4)
         
-        b, h, n, d = q.shape
-        q = rearrange(q, 'b h n d -> b n (h d)')
-        c = h * d
-        w = int(n ** 0.5)
-        a = self.pool(q.reshape(b, w, w, c).permute(0, 3, 1, 2)).reshape(b, c, -1).permute(0, 2, 1) # [b, a_num, c]
-        a = rearrange(a, 'b a_num (h d) -> b h a_num d', h=self.num_heads, d=self.head_qk_dim)
-
-        # expects q: b, h, n, d
-        q = rearrange(q, 'b n (h d) -> b h n d', h=self.num_heads, d=self.head_qk_dim)
-        output = self._la_impl(q, k, v, a, normalize=self.la_do_feature_map_norm)
+        output = self._la_impl(q, k, v, x, self.a_pooling, self.a_pool, self.a_proj, normalize=self.la_do_feature_map_norm)
         output = self.la_output_norm(output)
 
         output = rearrange(output, 'b h n d -> n b (h d)')
