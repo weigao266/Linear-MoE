@@ -1,17 +1,22 @@
 #!/bin/bash
+
+
+
 set -e
-ENV=$1
-LINEAR_MOE_PATH=$2
-MEGATRON_PATH=${LINEAR_MOE_PATH}/Megatron-LM-240405
+ENV=dsw
+CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+LINEAR_MOE_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export HF_ENDPOINT=https://hf-mirror.com
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=1
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=8
+GPUS_PER_NODE=1
 
 elif [ $ENV = dlc ]; then
 
@@ -23,38 +28,96 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$3
-BATCH_SIZE=$4
-GLOBAL_BATCH_SIZE=$5
-LR=$6
-MIN_LR=$7
-SEQ_LEN=$8
-PAD_LEN=$9
-EXTRA_VOCAB_SIZE=${10}
-PR=${11}
-TP=${12}
-PP=${13}
-AC=${14}
-DO=${15}
-FL=${16}
-SP=${17}
-TE=${18}
-MOE=${19}
-SAVE_INTERVAL=${20}
-DATASET_PATH=${21}
-PRETRAIN_CHECKPOINT_PATH=${22}
-TRAIN_TOKENS=${23}
-WARMUP_TOKENS=${24}
-OUTPUT_BASEPATH=${25}
+MODEL_SIZE=0.3B
+BATCH_SIZE=4
+GLOBAL_BATCH_SIZE=4
+LR=1e-5
+MIN_LR=1e-6
+SEQ_LEN=2048
+PAD_LEN=2048
+EXTRA_VOCAB_SIZE=256
+PR=bf16
+TP=1
+PP=1
+AC=sel
+DO=true
+FL=false
+SP=false
+TE=false
+MOE=false
+SAVE_INTERVAL=100000
+DATASET_PATH=/cpfs01/user/dujusen/dataset/llama3-datasets/wudao_llama3bpe_content_document
+PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/dujusen/models/Llama-3.2-1B
+TRAIN_TOKENS=10000000000
+WARMUP_TOKENS=10000
+OUTPUT_BASEPATH=./output
+
+LA_MODULE="mixattention"
+MIX_TYPE='A'
+A_NUM=256
+A_POOLING=true
+BASE_MODEL="llama3"
+
+# for models except mamba2
+LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --mix-type ${MIX_TYPE} \
+        --a-num ${A_NUM} \
+        --la-mode fused_chunk \
+        --base-model ${BASE_MODEL} \
+        --la-feature-map elu \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
+        "
+
+if [ $A_POOLING = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --a-pooling \
+        "
+fi
 
 if [ $MODEL_SIZE = 8B ]; then
 
 NUM_LAYERS=32
 HIDDEN_SIZE=4096
 NUM_ATTN_HEADS=32
-INTERMEDIATE_SIZE=14336
+INTERMEDIATE_SIZE=8192
 NUM_KEY_VALUE_HEADS=8
-MAX_POSITION_EMBEDDINGS=8192
+MAX_POSITION_EMBEDDINGS=131072
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+fi
+
+if [ $MODEL_SIZE = 1B ]; then
+
+NUM_LAYERS=16
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=32
+INTERMEDIATE_SIZE=8192
+NUM_KEY_VALUE_HEADS=8
+MAX_POSITION_EMBEDDINGS=131072
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+fi
+
+if [ $MODEL_SIZE = 0.3B ]; then
+
+NUM_LAYERS=16
+HIDDEN_SIZE=1024
+NUM_ATTN_HEADS=32
+INTERMEDIATE_SIZE=4096
+NUM_KEY_VALUE_HEADS=8
+MAX_POSITION_EMBEDDINGS=131072
 
 gqa_options=" \
 		    --group-query-attention \
@@ -215,7 +278,7 @@ megatron_options="  \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_llama.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options} ${linear_moe_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
