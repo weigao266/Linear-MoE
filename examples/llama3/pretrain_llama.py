@@ -13,6 +13,7 @@ from megatron.core.enums import ModelType
 from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
 from megatron.core.datasets.gpt_dataset import MockGPTDataset, GPTDataset
+from megatron.core.datasets.utils import get_blend_from_list
 import megatron.legacy.model
 from megatron.training import pretrain
 from megatron.core.transformer.spec_utils import import_module
@@ -50,7 +51,7 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
     print_rank_0('building GPT model ...')
     # Experimental loading arguments from yaml
     config = core_transformer_config_from_args(args)
-    if args.use_mcore_models:
+    if args.deprecated_use_mcore_models:
         if args.spec is not None:
             transformer_layer_spec = import_module(args.spec)
         else:
@@ -174,11 +175,15 @@ def core_gpt_dataset_config_from_args(args):
     return GPTDatasetConfig(
         random_seed=args.seed,
         sequence_length=args.seq_length,
-        blend=args.data_path,
-        blend_per_split=[args.train_data_path, args.valid_data_path, args.test_data_path],
+        blend=get_blend_from_list(args.data_path),
+        blend_per_split=[
+            get_blend_from_list(args.train_data_path),
+            get_blend_from_list(args.valid_data_path),
+            get_blend_from_list(args.test_data_path)
+        ],
         split=args.split,
         path_to_cache=args.data_cache_path,
-        mock=args.mock_data,
+        # mock=args.mock_data,
         mmap_bin_files=args.mmap_bin_files,
         tokenizer=tokenizer,
         reset_position_ids=args.reset_position_ids,

@@ -1,17 +1,23 @@
 #!/bin/bash
+
+export PATH=/cpfs01/user/dujusen/Linear-MoE-public/.venv/linear-moe/bin:$PATH
+export LD_LIBRARY_PATH=/cpfs01/user/dujusen/Linear-MoE-public/.venv/linear-moe/lib:$LD_LIBRARY_PATH
+
 set -e
-ENV=$1
-LINEAR_MOE_PATH=$2
-MEGATRON_PATH=${LINEAR_MOE_PATH}/Megatron-LM-231007
+ENV=dsw
+CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+LINEAR_MOE_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.4.0
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export HF_ENDPOINT=https://hf-mirror.com
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=8
+GPUS_PER_NODE=1
 
 elif [ $ENV = dlc ]; then
 
@@ -23,28 +29,28 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$3
-BATCH_SIZE=$4
-GLOBAL_BATCH_SIZE=$5
-LR=$6
-MIN_LR=$7
-SEQ_LEN=$8
-PAD_LEN=$9
-EXTRA_VOCAB_SIZE=${10}
-PR=${11}
-TP=${12}
-PP=${13}
-AC=${14}
-DO=${15}
-FL=${16}
-SP=${17}
-TE=${18}
-SAVE_INTERVAL=${19}
-DATASET_PATH=${20}
-PRETRAIN_CHECKPOINT_PATH=${21}
-TRAIN_TOKENS=${22}
-WARMUP_TOKENS=${23}
-OUTPUT_BASEPATH=${24}
+MODEL_SIZE=1B
+BATCH_SIZE=1
+GLOBAL_BATCH_SIZE=1
+LR=1e-5
+MIN_LR=1e-6
+SEQ_LEN=2048
+PAD_LEN=2048
+EXTRA_VOCAB_SIZE=0
+PR=bf16
+TP=1
+PP=1
+AC=sel
+DO=true
+FL=false
+SP=false
+TE=false
+SAVE_INTERVAL=100000
+DATASET_PATH=/cpfs01/shared/public/sunweigao/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
+PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/dujusen/models/Llama-3.2-1B
+TRAIN_TOKENS=10000000000
+WARMUP_TOKENS=10000
+OUTPUT_BASEPATH=./output
 
 if [ $MODEL_SIZE = 8B ]; then
 
@@ -54,6 +60,21 @@ NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=14336
 NUM_KEY_VALUE_HEADS=8
 MAX_POSITION_EMBEDDINGS=8192
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups ${NUM_KEY_VALUE_HEADS}"
+
+fi
+
+if [ $MODEL_SIZE = 1B ]; then
+
+NUM_LAYERS=16
+HIDDEN_SIZE=2048
+NUM_ATTN_HEADS=32
+INTERMEDIATE_SIZE=8192
+NUM_KEY_VALUE_HEADS=8
+MAX_POSITION_EMBEDDINGS=131072
 
 gqa_options=" \
 		    --group-query-attention \
@@ -191,14 +212,13 @@ megatron_options="  \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
         --untie-embeddings-and-output-weights \
-        --rotary-base 500000 \
         --attention-dropout 0.0 \
         --hidden-dropout 0.0 \
         --disable-bias-linear \
         --norm-epsilon 1e-05 \
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS ../llama2/pretrain_megatron_llama.py
+run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_megatron_llama.py
  ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options}"
 
 echo ${run_cmd}
