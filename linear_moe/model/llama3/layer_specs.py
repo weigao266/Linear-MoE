@@ -29,7 +29,8 @@ from megatron.core.transformer.identity_op import IdentityOp
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_layer import TransformerLayer, TransformerLayerSubmodules
 
-from linear_moe.model.qwen2.hybrid.hybrid_transformer_block import HybridTransformerBlock, HybridTransformerBlockSubmodules
+from linear_moe.model.llama3.hybrid.hybrid_transformer_block import HybridTransformerBlock, HybridTransformerBlockSubmodules
+from linear_moe.model.llama3.rms_norm import Llama3RMSNorm
 from linear_moe.sequence_modeling.mixattention import MixAttention
 from linear_moe.sequence_modeling.linear_attention import LinearAttention, LinearAttentionSubmodules
 
@@ -112,7 +113,7 @@ def get_hybrid_mixattention_linear_moe_layer_local_spec(
             linear_transformer_layer=ModuleSpec(
                 module=TransformerLayer,
                 submodules=TransformerLayerSubmodules(
-                    input_layernorm=FusedLayerNorm,
+                    input_layernorm=Llama3RMSNorm,
                     self_attention=ModuleSpec(
                         module=LinearAttention,
                         # params={"attn_mask_type": AttnMaskType.causal},
@@ -124,7 +125,7 @@ def get_hybrid_mixattention_linear_moe_layer_local_spec(
                         ),
                     ),
                     self_attn_bda=get_bias_dropout_add,
-                    pre_mlp_layernorm=FusedLayerNorm,
+                    pre_mlp_layernorm=Llama3RMSNorm,
                     mlp=mlp,
                     mlp_bda=get_bias_dropout_add,
                     sharded_state_dict_keys_map={
@@ -136,7 +137,7 @@ def get_hybrid_mixattention_linear_moe_layer_local_spec(
             normal_transformer_layer=ModuleSpec(
                 module=TransformerLayer,
                 submodules=TransformerLayerSubmodules(
-                    input_layernorm=FusedLayerNorm,
+                    input_layernorm=Llama3RMSNorm,
                     self_attention=ModuleSpec(
                         module=SelfAttention,
                         params={"attn_mask_type": AttnMaskType.causal},
@@ -149,7 +150,7 @@ def get_hybrid_mixattention_linear_moe_layer_local_spec(
                         ),
                     ),
                     self_attn_bda=get_bias_dropout_add,
-                    pre_mlp_layernorm=FusedLayerNorm,
+                    pre_mlp_layernorm=Llama3RMSNorm,
                     mlp=mlp,
                     mlp_bda=get_bias_dropout_add,
                     sharded_state_dict_keys_map={
