@@ -13,9 +13,9 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 export HF_ENDPOINT=https://hf-mirror.com
 
 ENV=dsw
-MODEL_SIZE=A0.3B
-BATCH_SIZE=1
-GLOBAL_BATCH_SIZE=2
+MODEL_SIZE=A1B
+BATCH_SIZE=4
+GLOBAL_BATCH_SIZE=16
 LR=1e-4
 MIN_LR=1e-5
 SEQ_LEN=2048
@@ -23,29 +23,29 @@ PAD_LEN=2048
 PR=bf16
 TP=1
 PP=1
-EP=1
+EP=4
 AC=sel
 DO=true
 FL=false
 SP=false
 TE=false
-MB=true
+MB=false
+USE_GEMM=true
 TOKEN_DROPPING=false
 TRAIN_CAPACITY_FACTOR=1.25
 EVAL_CAPACITY_FACTOR=2.0
-USE_GEMM=false
 SAVE_INTERVAL=100000
 DATASET_PATH=/cpfs01/shared/public/sunweigao/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
-PRETRAIN_CHECKPOINT_PATH=Qwen/Qwen2-0.5B
+PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/landisen/models/Qwen2-0.5B
 TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
-OUTPUT_BASEPATH=./output
+OUTPUT_BASEPATH=./test
 
-LA_MODULE="retention"
+LA_MODULE="linear_attention"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
-LAYER_TYPE_LIST="LLLLLLLLLLLL"
+LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
 # LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
 # LAYER_TYPE_LIST="LLLNLLLNLLLN"
 # LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
@@ -75,7 +75,7 @@ linear_moe_options=" \
         --la-module ${LA_MODULE} \
         --la-mode fused_chunk \
         --base-model ${BASE_MODEL} \
-        --la-feature-map swish \
+        --la-feature-map elu \
         --la-output-norm rmsnorm \
         --la-gate-fn swish \
         --layer-type-list ${LAYER_TYPE_LIST} \
@@ -113,12 +113,12 @@ if [ $USE_GEMM = true ]; then
 fi
 
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=2
+GPUS_PER_NODE=4
 
 elif [ $ENV = dlc ]; then
 
