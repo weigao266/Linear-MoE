@@ -15,18 +15,20 @@ export HF_ENDPOINT=https://hf-mirror.com
 ENV=dsw
 MODEL_SIZE=A0.3B
 BATCH_SIZE=1
-GLOBAL_BATCH_SIZE=2
+GLOBAL_BATCH_SIZE=4
 LR=1e-4
 MIN_LR=1e-5
-SEQ_LEN=2048
-PAD_LEN=2048
+SEQ_LEN=1024
+PAD_LEN=1024
 PR=bf16
 TP=1
 PP=1
+CP=4
 EP=1
 AC=sel
 DO=true
 FL=false
+FU=false
 SP=false
 TE=false
 SAVE_INTERVAL=100000
@@ -36,7 +38,7 @@ TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="retention"
+LA_MODULE="lasp2"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
@@ -92,12 +94,12 @@ linear_moe_options=" \
 # --moe-grouped-gemm \
 
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=2
+GPUS_PER_NODE=4
 
 elif [ $ENV = dlc ]; then
 
@@ -316,12 +318,19 @@ fi
 if [ $FL = true ]; then
     flash_options=" \
 		    --use-flash-attn"
-    export NVTE_FLASH_ATTN=1 NVTE_FUSED_ATTN=0
+    export NVTE_FLASH_ATTN=1
 
 elif [ $FL = false ]; then
     flash_options=" \
                     "
-    export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
+    export NVTE_FLASH_ATTN=0
+fi
+
+if [ $FU = true ]; then
+    export NVTE_FUSED_ATTN=1
+
+elif [ $FU = false ]; then
+    export NVTE_FUSED_ATTN=0
 fi
 
 if [ $TE = true ]; then
@@ -402,6 +411,7 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
+        --context-parallel-size ${CP} \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \

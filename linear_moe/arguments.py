@@ -462,6 +462,10 @@ def get_patch_args(parser):
     )
 
     group.add_argument(
+        "--train-mode", default="pretrain", type=str, help="pretrain or finetune"
+    )
+
+    group.add_argument(
         '--use-la-module',
         action='store_true',
         help=
