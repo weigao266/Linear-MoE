@@ -345,6 +345,9 @@ def get_patch_args(parser):
     group.add_argument('--moe-min-capacity', type=int, default=4,
                        help='The minimum capacity per MoE expert regardless of the capacity_factor.')
 
+    group.add_argument('--moe-token-dropping', action='store_true',
+                       help='Enable token dropping for MoE.')
+
     group.add_argument('--moe-loss-coeff', type=float, default=0.01,
                        help='Scaling coefficient for adding MoE loss to model loss')
 

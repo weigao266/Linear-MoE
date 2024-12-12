@@ -94,6 +94,10 @@ class MoELayer(BaseMoELayer):
             self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
         if self.config.moe_megablocks:
+            if self.training:
+                moe_expert_capacity_factor = self.config.moe_train_capacity_factor
+            else:
+                moe_expert_capacity_factor = self.config.moe_eval_capacity_factor
             mb_args = MegablocksArguments(
                 # ffn settings
                 hidden_size=self.config.hidden_size,
@@ -106,7 +110,7 @@ class MoELayer(BaseMoELayer):
                 # moe settings
                 moe_num_experts=self.config.num_moe_experts,
                 moe_top_k=self.config.moe_router_topk,
-                moe_capacity_factor=self.config.moe_expert_capacity_factor,
+                moe_capacity_factor=moe_expert_capacity_factor,
                 moe_expert_model_parallelism=self.config.expert_model_parallel_size > 1,
                 expert_parallel_group=parallel_state.get_expert_model_parallel_group(),
                 moe_loss_weight=0,  # set to 0 to disable aux loss calculation here
