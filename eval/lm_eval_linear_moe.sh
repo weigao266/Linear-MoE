@@ -1,68 +1,83 @@
 #!/bin/bash
 set -e
-
-CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-LINEAR_MOE_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0
-FLA_PATH=${LINEAR_MOE_PATH}/third_party/flash-linear-attention-1018
-echo $MEGATRON_PATH
-echo $FLA_PATH
-export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
-export PYTHONPATH=${FLA_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
+ENV=dsw #$1
+MASTER_ADDR=localhost
+MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+LINEAR_MOE_PATH=/cpfs01/user/landisen/Linear-MoE-public 
+MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0 #${LINEAR_MOE_HPAT}/Megatron-LM-231007
+OPENCOMPASS_PATH=${LINEAR_MOE_PATH}/third_party/opencompass
+export PYTHONPATH=${MEGATRON_PATH}:${OPENCOMPASS_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export HF_ENDPOINT=https://hf-mirror.com
+export MKL_SERVICE_FORCE_INTEL=1
+export MKL_THREADING_LAYER=GNU
+export CUDA_LAUNCH_BLOCKING=1
 
-ENV=dsw
-MODEL_SIZE=A1B
+DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
+
+CHECKPOINT_DIR=/cpfs01/user/landisen/Linear-MoE-public/checkpoint
+CHECKPOINT_PATH=${CHECKPOINT_DIR}/pretrain-mcore-linear_attention-qwen2-A0.3B-lr-1e-4-minlr-1e-5-bs-8-gbs-64-seqlen-2048-pr-bf16-tp-1-pp-1-ac-sel-do-true-sp-false-tt-15000000000-wt-10000
+# CHECKPOINT_DIR=/cpfs01/user/landisen/Linear-MoE-public/examples/linear_moe_qwen2/pure_A1B/checkpoint
+# CHECKPOINT_PATH=${CHECKPOINT_DIR}/pretrain-mcore-linear_attention-qwen2-A1B-lr-1e-5-minlr-1e-6-bs-4-gbs-192-seqlen-2048-pr-bf16-tp-1-pp-1-ac-sel-do-true-sp-false-tt-100000000000-wt-10000
+
+TP=1 
+BS=1 
+SEQ_LEN=2048
+PAD_LEN=2048
+EXTRA_VOCAB_SIZE=293
+PR=bf16 
+INPUT_SEQ_LEN=2048 
+OUTPUT_SEQ_LEN=2048 
+TOP_K=10 
+TOP_P=0 
+TEMPERATURE=1.0 #${17}
+# set this penalty between 1.1 and 1.5 to reduce repetition, default is 1.2
+REPETITION_PENALTY=1.2 
+
+# ENV=dlc
+MODEL_SIZE=A0.3B
 BATCH_SIZE=4
-GLOBAL_BATCH_SIZE=16
-LR=1e-4
-MIN_LR=1e-5
+GLOBAL_BATCH_SIZE=128
+LR=1e-5
+MIN_LR=1e-6
 SEQ_LEN=2048
 PAD_LEN=2048
 PR=bf16
 TP=1
 PP=1
-EP=4
+EP=1
 AC=sel
 DO=true
 FL=false
 SP=false
 TE=false
 MB=false
-USE_GEMM=true
+USE_GEMM=false
 TOKEN_DROPPING=false
 TRAIN_CAPACITY_FACTOR=1.25
 EVAL_CAPACITY_FACTOR=2.0
 SAVE_INTERVAL=100000
-DATASET_PATH=/cpfs01/shared/public/sunweigao/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
-PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/landisen/models/Qwen2-0.5B
-TRAIN_TOKENS=15000000000
+TRAIN_TOKENS=100000000000
 WARMUP_TOKENS=10000
-OUTPUT_BASEPATH=./test
+OUTPUT_BASEPATH=./lm_eval
 
-LA_MODULE="linear_attention"
+LA_MODULE="gla"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
-LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
-# LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
 # LAYER_TYPE_LIST="LLLNLLLNLLLN"
-# LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
+LAYER_TYPE_LIST="LLLLLLLLLLLL"
 
 # for only mamba2, MLP layers are fixed behind mamba or attention layers. M: mamba layer, *: attention layer
 # for pure_mamba2
 HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
-# HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMMMMMM"
 # for hybrid_mamba2
 # HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*"
-# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*MMM*"
 
 # # Turn on --megatron-hybrid-mamba-method to use the logic in Megatron-LM.
 # HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-"
-# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-"
 
-# # SSM
+# SSM
 # linear_moe_options=" \
 #         --use-la-module \
 #         --la-module ${LA_MODULE} \
@@ -92,33 +107,13 @@ linear_moe_options=" \
 #         --layer-type-list ${LAYER_TYPE_LIST} \
 #         "
 
-if [ $MB = true ]; then
-    linear_moe_options="${linear_moe_options} \
-        --moe-megablocks \
-        "
-fi
-
-if [ $TOKEN_DROPPING = true ]; then
-    linear_moe_options="${linear_moe_options} \
-        --moe-train-capacity-factor ${TRAIN_CAPACITY_FACTOR} \
-        --moe-eval-capacity-factor ${EVAL_CAPACITY_FACTOR} \
-        --moe-token-dropping \
-        "
-fi
-
-if [ $USE_GEMM = true ]; then
-    linear_moe_options="${linear_moe_options} \
-        --moe-grouped-gemm \
-        "
-fi
-
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=1
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=4
+GPUS_PER_NODE=1
 
 elif [ $ENV = dlc ]; then
 
@@ -337,12 +332,10 @@ fi
 if [ $FL = true ]; then
     flash_options=" \
 		    --use-flash-attn"
-    export NVTE_FLASH_ATTN=1 NVTE_FUSED_ATTN=0
 
 elif [ $FL = false ]; then
     flash_options=" \
                     "
-    export NVTE_FLASH_ATTN=0 NVTE_FUSED_ATTN=1
 fi
 
 if [ $TE = true ]; then
@@ -364,29 +357,33 @@ elif [ $SP = false ]; then
                     "
 fi
 
-if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
+# if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
+#     load_options=" \
+#             --load $PRETRAIN_CHECKPOINT_PATH"
+# fi
+
+if [ $CHECKPOINT_PATH != none ]; then
     load_options=" \
-            --load $PRETRAIN_CHECKPOINT_PATH"
+		    --load $CHECKPOINT_PATH"
 fi
 
 TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-NAME="pretrain-mcore-${LA_MODULE}-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ep-${EP}-mb-${MB}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
-mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
-mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
-mkdir -p "${OUTPUT_BASEPATH}/log/"
+NAME="pretrain-mcore-${LA_MODULE}-qwen2-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+# mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
+# mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
+# mkdir -p "${OUTPUT_BASEPATH}/log/"
 current_time=$(date "+%Y.%m.%d-%H.%M.%S")
 TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${NAME}_${current_time}"
-mkdir -p ${TENSORBOARD_DIR}
+# mkdir -p ${TENSORBOARD_DIR}
 
 LOG_FILE="${OUTPUT_BASEPATH}/log/${current_time}_${NAME}.log"
 
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
-        --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
         --data-path ${DATASET_PATH} \
         --split 99,1,0 \
         --lr ${LR} \
@@ -445,10 +442,19 @@ megatron_options="  \
         --rotary-seq-len-interpolation-factor 1 \
         --no-create-attention-mask-in-dataloader \
         --hybrid-override-pattern ${HYBRID_OVERRIDE_PATTERN} \
+        --max-tokens-to-oom 1000000
         "
 
-run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_qwen.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options} ${linear_moe_options} 2>&1 | sudo tee -a $LOG_FILE"
+# piqa,hellaswag,winogrande,arc_easy,arc_challenge,mmlu
+# torchrun $DISTRIBUTED_ARGS
+run_cmd="torchrun $DISTRIBUTED_ARGS --no-python lm_eval \
+ --model linear_moe \
+ --model_args path=${CHECKPOINT_PATH} max_length=2048 \
+ --tasks piqa \
+ --device cuda:1 \
+ --batch_size 64 \
+ --output_path lm_eval_result \
+ ${megatron_options} ${pr_options} ${load_options} ${input_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options} ${linear_moe_options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
