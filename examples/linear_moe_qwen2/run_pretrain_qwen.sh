@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -e
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
@@ -37,13 +38,13 @@ TOKEN_DROPPING=false
 TRAIN_CAPACITY_FACTOR=1.25
 EVAL_CAPACITY_FACTOR=2.0
 SAVE_INTERVAL=100000
-DATASET_PATH=/cpfs01/shared/public/sunweigao/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
-PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/landisen/models/Qwen2-0.5B
+DATASET_PATH=/cpfs01/shared/MOE/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
+PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/sunweigao/my/qwen-ckpts/Qwen2-0.5B
 TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./test
 
-LA_MODULE="lasp2"
+LA_MODULE="gla"
 BASE_MODEL="qwen2"
 
 # for models except mamba2

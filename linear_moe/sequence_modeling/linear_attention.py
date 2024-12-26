@@ -202,6 +202,13 @@ class LinearAttention(MegatronModule):
                 v=v,
                 beta=beta,
             )
+        elif self.la_module == 'mixattention':
+            o = self.core_linear_attention(
+                x=hidden_states,
+                q=q,
+                k=k,
+                v=v,
+            )
         else:
             o = self.core_linear_attention(
                 q=q,

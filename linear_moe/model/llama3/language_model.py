@@ -9,10 +9,10 @@ from megatron.training import get_args
 from megatron.core import mpu, tensor_parallel
 from megatron.core.enums import ModelType
 from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
-from megatron.legacy.model.utils import get_linear_layer
-from megatron.legacy.model.utils import init_method_normal, scaled_init_method_normal
-from megatron.legacy.model.enums import AttnMaskType, LayerType
-from megatron.legacy.model.module import MegatronModule
+from megatron.model.utils import get_linear_layer
+from megatron.model.utils import init_method_normal, scaled_init_method_normal
+from megatron.model.enums import AttnMaskType, LayerType
+from megatron.model.module import MegatronModule
 
 from .transformer_legacy import ParallelTransformer
 

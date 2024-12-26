@@ -13,6 +13,7 @@ from megatron.core.enums import ModelType
 from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
 from megatron.core.datasets.gpt_dataset import MockGPTDataset, GPTDataset
+from megatron.core.datasets.utils import get_blend_from_list
 import megatron.legacy.model
 from megatron.training import pretrain
 from megatron.core.transformer.spec_utils import import_module
@@ -25,8 +26,23 @@ from megatron.training.arguments import core_transformer_config_from_args
 
 from linear_moe.data.utils import get_batch_on_this_tp_rank_original
 from linear_moe.data import build_pretrain_dataset_from_original
-from linear_moe.model.llama3.layer_specs import get_gpt_layer_with_transformer_engine_spec
+from linear_moe.model.llama3.layer_specs import ( 
+    get_gpt_layer_with_transformer_engine_spec,
+    get_gpt_layer_local_spec,
+    get_hybrid_retention_linear_moe_layer_local_spec,
+    get_hybrid_based_linear_moe_layer_local_spec,
+    get_hybrid_rebased_linear_moe_layer_local_spec,
+    get_hybrid_mamba2_linear_moe_layer_local_spec,
+    get_hybrid_basic_linear_attention_linear_moe_layer_local_spec,
+    get_hybrid_gla_linear_moe_layer_local_spec,
+    get_hybrid_deltanet_linear_moe_layer_local_spec,
+    get_hybrid_rwkv6_linear_moe_layer_local_spec,
+    get_hybrid_hgrn2_linear_moe_layer_local_spec,
+)
 from linear_moe.model.llama3.model import GPTModel
+from linear_moe.model.llama3.hybrid.hybrid_model import HybridGPTModel
+from linear_moe.sequence_modeling.mamba2.mamba_model import MambaModel
+from linear_moe.model.llama3.transformer_config import Llama3TransformerConfig
 from linear_moe.arguments import get_patch_args
 from linear_moe.tokenizer import get_tokenizer, build_tokenizer
 import torch._dynamo
@@ -47,15 +63,70 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
     """
     args = get_args()
     build_tokenizer(args)
-    print_rank_0('building GPT model ...')
+    print_rank_0('building Linear-Llama3 model ...')
     # Experimental loading arguments from yaml
-    config = core_transformer_config_from_args(args)
-    if args.use_mcore_models:
-        if args.spec is not None:
-            transformer_layer_spec = import_module(args.spec)
+    config = core_transformer_config_from_args(args, Llama3TransformerConfig)
+    # import pdb; pdb.set_trace()
+    if args.use_la_module:
+        if args.la_module == "mamba2":
+            mamba_stack_spec = get_hybrid_mamba2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "retention":
+            hybrid_transformer_layer_spec = get_hybrid_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "based":
+            hybrid_transformer_layer_spec = get_hybrid_based_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "rebased":
+            hybrid_transformer_layer_spec = get_hybrid_rebased_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "linear_attention":
+            hybrid_transformer_layer_spec = get_hybrid_basic_linear_attention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "gla":
+            hybrid_transformer_layer_spec = get_hybrid_gla_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "deltanet":
+            hybrid_transformer_layer_spec = get_hybrid_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "rwkv6":
+            hybrid_transformer_layer_spec = get_hybrid_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "hgrn2":
+            hybrid_transformer_layer_spec = get_hybrid_hgrn2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+    else:
+        if args.transformer_impl == "transformer_engine":
+            transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         else:
-            transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
+            transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
 
+    if args.use_la_module:
+        if args.la_module in ["mamba2"]:
+            model = MambaModel(
+                config=config,
+                mamba_stack_spec=mamba_stack_spec,
+                vocab_size=args.padded_vocab_size,
+                max_sequence_length=args.max_position_embeddings,
+                pre_process=pre_process,
+                hybrid_attention_ratio=args.hybrid_attention_ratio,
+                hybrid_mlp_ratio=args.hybrid_mlp_ratio,
+                hybrid_override_pattern=args.hybrid_override_pattern,
+                post_process=post_process,
+                fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
+                parallel_output=True,
+                share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+                position_embedding_type=args.position_embedding_type
+            )
+        else:
+            model = HybridGPTModel(
+                config=config,
+                hybrid_transformer_layer_spec=hybrid_transformer_layer_spec,
+                layer_type_list=args.layer_type_list,
+                vocab_size=args.padded_vocab_size,
+                max_sequence_length=args.max_position_embeddings,
+                pre_process=pre_process,
+                post_process=post_process,
+                fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
+                parallel_output=True,
+                share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+                position_embedding_type=args.position_embedding_type,
+                rotary_percent=args.rotary_percent,
+                rotary_base=args.rotary_base,
+                seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
+            )
+    else:
         model = GPTModel(
             config=config,
             transformer_layer_spec=transformer_layer_spec,
@@ -71,17 +142,6 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, megat
             rotary_base=args.rotary_base,
             seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
         )
-    else:
-        assert(args.context_parallel_size == 1), "Context parallelism is only supported with Megatron Core!"
-        from linear_moe.model.llama3.gpt_model import GPTModel as GPTModelX
-        model = GPTModelX(
-            config,
-            num_tokentypes=0,
-            parallel_output=True,
-            pre_process=pre_process,
-            post_process=post_process
-        )
-
     return model
 
 
@@ -174,11 +234,15 @@ def core_gpt_dataset_config_from_args(args):
     return GPTDatasetConfig(
         random_seed=args.seed,
         sequence_length=args.seq_length,
-        blend=args.data_path,
-        blend_per_split=[args.train_data_path, args.valid_data_path, args.test_data_path],
+        blend=get_blend_from_list(args.data_path),
+        blend_per_split=[
+            get_blend_from_list(args.train_data_path),
+            get_blend_from_list(args.valid_data_path),
+            get_blend_from_list(args.test_data_path)
+        ],
         split=args.split,
         path_to_cache=args.data_cache_path,
-        mock=args.mock_data,
+        # mock=args.mock_data,
         mmap_bin_files=args.mmap_bin_files,
         tokenizer=tokenizer,
         reset_position_ids=args.reset_position_ids,
