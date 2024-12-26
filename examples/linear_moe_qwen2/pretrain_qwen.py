@@ -35,7 +35,6 @@ from linear_moe.model.qwen2.layer_specs import (
     get_hybrid_basic_linear_attention_linear_moe_layer_local_spec,
     get_hybrid_gla_linear_moe_layer_local_spec,
     get_hybrid_deltanet_linear_moe_layer_local_spec,
-    get_hybrid_mixattention_linear_moe_layer_local_spec,
     get_hybrid_rwkv6_linear_moe_layer_local_spec,
     get_hybrid_hgrn2_linear_moe_layer_local_spec,
 )
@@ -58,7 +57,6 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
         compute_weight_and_optimizer_memory(args, verbose=True)
 
     config = core_transformer_config_from_args(args, Qwen2TransformerConfig)
-    use_te = args.transformer_impl == "transformer_engine"
 
     if args.use_la_module:
         if args.la_module == "mamba2":
@@ -75,16 +73,13 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             hybrid_transformer_layer_spec = get_hybrid_gla_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "deltanet":
             hybrid_transformer_layer_spec = get_hybrid_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
-        elif args.la_module == "mixattention":
-            hybrid_transformer_layer_spec = get_hybrid_mixattention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "rwkv6":
             hybrid_transformer_layer_spec = get_hybrid_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "hgrn2":
             hybrid_transformer_layer_spec = get_hybrid_hgrn2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
     else:
-        if use_te:
-            transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm,
-                                                                                args.qk_layernorm)
+        if args.transformer_impl == "transformer_engine":
+            transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         else:
             transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
 
@@ -138,7 +133,6 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             rotary_base=args.rotary_base,
             seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
         )
-
     return model
 
 

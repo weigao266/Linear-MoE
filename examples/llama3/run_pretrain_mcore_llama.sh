@@ -1,36 +1,22 @@
 #!/bin/bash
 
-
-
 set -e
-ENV=dsw
+
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 LINEAR_MOE_PATH=$( dirname $( dirname ${CURRENT_DIR}))
 MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0
+FLA_PATH=${LINEAR_MOE_PATH}/third_party/flash-linear-attention-1018
+echo $MEGATRON_PATH
+echo $FLA_PATH
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
+export PYTHONPATH=${FLA_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export HF_ENDPOINT=https://hf-mirror.com
-if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=1
-MASTER_ADDR=localhost
-MASTER_PORT=$(shuf -n 1 -i 10000-65535)
-NNODES=1
-NODE_RANK=0
-GPUS_PER_NODE=1
 
-elif [ $ENV = dlc ]; then
-
-NNODES=${WORLD_SIZE}
-NODE_RANK=${RANK}
-GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
-
-fi
-
-DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-
+ENV=dsw
 MODEL_SIZE=0.3B
 BATCH_SIZE=4
-GLOBAL_BATCH_SIZE=4
+GLOBAL_BATCH_SIZE=8
 LR=1e-5
 MIN_LR=1e-6
 SEQ_LEN=2048
@@ -45,40 +31,107 @@ FL=false
 SP=false
 TE=false
 MOE=false
+MB=false
+TOKEN_DROPPING=false
+TRAIN_CAPACITY_FACTOR=1.25
+EVAL_CAPACITY_FACTOR=2.0
+USE_GEMM=false
 SAVE_INTERVAL=100000
-DATASET_PATH=/cpfs01/user/dujusen/dataset/llama3-datasets/wudao_llama3bpe_content_document
-PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/dujusen/models/Llama-3.2-1B
+DATASET_PATH=/cpfs01/user/sunweigao/my/llama3-datasets/wudao_llama3bpe_content_document
+PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/sunweigao/my/llama3-ckpts/Meta-Llama-3-8B
 TRAIN_TOKENS=10000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="mixattention"
-MIX_TYPE='A'
-A_NUM=256
-A_POOLING=true
+LA_MODULE="mamba2"
 BASE_MODEL="llama3"
 
 # for models except mamba2
-LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+LAYER_TYPE_LIST="LLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLNLLLNLLLN"
+# LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
 
+# for only mamba2, MLP layers are fixed behind mamba or attention layers. M: mamba layer, *: attention layer
+# for pure_mamba2
+HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
+# HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMMMMMM"
+# for hybrid_mamba2
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*"
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*MMM*"
+
+# # Turn on --megatron-hybrid-mamba-method to use the logic in Megatron-LM.
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-"
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-"
+
+# SSM
 linear_moe_options=" \
         --use-la-module \
         --la-module ${LA_MODULE} \
-        --mix-type ${MIX_TYPE} \
-        --a-num ${A_NUM} \
-        --la-mode fused_chunk \
         --base-model ${BASE_MODEL} \
-        --la-feature-map elu \
-        --la-output-norm rmsnorm \
-        --la-gate-fn swish \
-        --layer-type-list ${LAYER_TYPE_LIST} \
         "
 
-if [ $A_POOLING = true ]; then
+# # Linear Attention
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --la-mode chunk \
+#         --base-model ${BASE_MODEL} \
+#         --la-feature-map swish \
+#         --la-output-norm rmsnorm \
+#         --la-gate-fn swish \
+#         --layer-type-list ${LAYER_TYPE_LIST} \
+#         "
+
+# # Linear RNN
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --la-mode chunk \
+#         --base-model ${BASE_MODEL} \
+#         --la-output-norm rmsnorm \
+#         --la-gate-fn swish \
+#         --layer-type-list ${LAYER_TYPE_LIST} \
+#         "
+
+if [ $MB = true ]; then
     linear_moe_options="${linear_moe_options} \
-        --a-pooling \
+        --moe-megablocks \
         "
 fi
+
+if [ $TOKEN_DROPPING = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-train-capacity-factor ${TRAIN_CAPACITY_FACTOR} \
+        --moe-eval-capacity-factor ${EVAL_CAPACITY_FACTOR} \
+        --moe-token-dropping \
+        "
+fi
+
+if [ $USE_GEMM = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-grouped-gemm \
+        "
+fi
+
+if [ $ENV = dsw ]; then
+export CUDA_VISIBLE_DEVICES=0,1
+MASTER_ADDR=localhost
+MASTER_PORT=$(shuf -n 1 -i 10000-65535)
+NNODES=1
+NODE_RANK=0
+GPUS_PER_NODE=2
+
+elif [ $ENV = dlc ]; then
+
+NNODES=${WORLD_SIZE}
+NODE_RANK=${RANK}
+GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
+
+fi
+
+DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
+
 
 if [ $MODEL_SIZE = 8B ]; then
 
@@ -112,7 +165,7 @@ fi
 
 if [ $MODEL_SIZE = 0.3B ]; then
 
-NUM_LAYERS=16
+NUM_LAYERS=12
 HIDDEN_SIZE=1024
 NUM_ATTN_HEADS=32
 INTERMEDIATE_SIZE=4096
@@ -212,13 +265,15 @@ TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-NAME="pretrain-mcore-llama3-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-moe-${MOE}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+NAME="pretrain-mcore-${LA_MODULE}-llama3-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-moe-${MOE}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
 current_time=$(date "+%Y.%m.%d-%H.%M.%S")
 TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${NAME}_${current_time}"
 mkdir -p ${TENSORBOARD_DIR}
+
+LOG_FILE="${OUTPUT_BASEPATH}/log/${current_time}_${NAME}.log"
 
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
@@ -278,7 +333,7 @@ megatron_options="  \
         "
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_llama.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options} ${linear_moe_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options} ${linear_moe_options} 2>&1 | sudo tee -a $LOG_FILE"
 
 echo ${run_cmd}
 eval ${run_cmd}

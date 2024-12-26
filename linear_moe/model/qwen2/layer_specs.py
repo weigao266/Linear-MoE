@@ -1,17 +1,3 @@
-# Copyright (c) 2023 Alibaba PAI and Nvidia Megatron-LM Team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import torch.nn as nn
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
 from megatron.core.fusions.fused_layer_norm import FusedLayerNorm
@@ -37,7 +23,6 @@ from linear_moe.sequence_modeling.basic_linear_attention import BasicLinearAtten
 from linear_moe.sequence_modeling.gla import GLA
 from linear_moe.sequence_modeling.gla import GLAGate
 from linear_moe.sequence_modeling.deltanet import DeltaNet
-from linear_moe.sequence_modeling.mixattention import MixAttention
 from linear_moe.sequence_modeling.rwkv6 import DDLerpLinear
 from linear_moe.sequence_modeling.rwkv6 import RWKV6
 from linear_moe.sequence_modeling.hgrn2 import HGRN2
@@ -460,69 +445,6 @@ def get_hybrid_deltanet_linear_moe_layer_local_spec(
                             qkv_proj=ColumnParallelLinear,
                             o_gate_proj=ColumnParallelLinear,
                             core_linear_attention=DeltaNet,
-                            o_proj=RowParallelLinear,
-                        ),
-                    ),
-                    self_attn_bda=get_bias_dropout_add,
-                    pre_mlp_layernorm=Qwen2RMSNorm,
-                    mlp=mlp,
-                    mlp_bda=get_bias_dropout_add,
-                    sharded_state_dict_keys_map={
-                        'input_layernorm.': 'self_attention.linear_qkv.layer_norm_',
-                        'pre_mlp_layernorm.': 'mlp.linear_fc1.layer_norm_',
-                    },
-                ),
-            ),
-            normal_transformer_layer=ModuleSpec(
-                module=TransformerLayer,
-                submodules=TransformerLayerSubmodules(
-                    input_layernorm=Qwen2RMSNorm,
-                    self_attention=ModuleSpec(
-                        module=SelfAttention,
-                        params={"attn_mask_type": AttnMaskType.causal},
-                        submodules=SelfAttentionSubmodules(
-                            linear_qkv=ColumnParallelLinear,
-                            core_attention=DotProductAttention,
-                            linear_proj=RowParallelLinear,
-                            q_layernorm=FusedLayerNorm if qk_layernorm else IdentityOp,
-                            k_layernorm=FusedLayerNorm if qk_layernorm else IdentityOp,
-                        ),
-                    ),
-                    self_attn_bda=get_bias_dropout_add,
-                    pre_mlp_layernorm=Qwen2RMSNorm,
-                    mlp=mlp,
-                    mlp_bda=get_bias_dropout_add,
-                    sharded_state_dict_keys_map={
-                        'input_layernorm.': 'self_attention.linear_qkv.layer_norm_',
-                        'pre_mlp_layernorm.': 'mlp.linear_fc1.layer_norm_',
-                    },
-                ),
-            ),
-        ),
-    )
-
-
-# Use this spec for an implementation using only modules in megatron core
-def get_hybrid_mixattention_linear_moe_layer_local_spec(
-    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False
-) -> ModuleSpec:
-    mlp = _get_mlp_module_spec(
-        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm
-    )
-    return ModuleSpec(
-        module=HybridTransformerBlock,
-        submodules=HybridTransformerBlockSubmodules(
-            linear_transformer_layer=ModuleSpec(
-                module=TransformerLayer,
-                submodules=TransformerLayerSubmodules(
-                    input_layernorm=Qwen2RMSNorm,
-                    self_attention=ModuleSpec(
-                        module=LinearAttention,
-                        # params={"attn_mask_type": AttnMaskType.causal},
-                        submodules=LinearAttentionSubmodules(
-                            qkv_proj=ColumnParallelLinear,
-                            o_gate_proj=ColumnParallelLinear,
-                            core_linear_attention=MixAttention,
                             o_proj=RowParallelLinear,
                         ),
                     ),

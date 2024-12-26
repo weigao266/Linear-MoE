@@ -58,12 +58,6 @@ class Llama3TransformerConfig(TransformerConfig):
     base_model: str = None
 
     la_feature_map: str = None
-
-    a_num: int = None
-
-    a_pooling: bool = None
-
-    mix_type: str = None
     
     la_tie_feature_map_qk:  bool = False
     

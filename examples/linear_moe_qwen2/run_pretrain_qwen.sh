@@ -1,8 +1,5 @@
 #!/bin/bash
 
-export PATH=/cpfs01/user/dujusen/Linear-MoE-public/.venv/linear-moe/bin:$PATH
-export LD_LIBRARY_PATH=/cpfs01/user/dujusen/Linear-MoE-public/.venv/linear-moe/lib:$LD_LIBRARY_PATH
-
 set -e
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
@@ -39,15 +36,13 @@ TRAIN_CAPACITY_FACTOR=1.25
 EVAL_CAPACITY_FACTOR=2.0
 USE_GEMM=false
 SAVE_INTERVAL=100000
-DATASET_PATH=/cpfs01/shared/public/sunweigao/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
-PRETRAIN_CHECKPOINT_PATH=Qwen/Qwen2-0.5B
+DATASET_PATH=/cpfs01/shared/MOE/data-SlimPajama/slimpajama_chunk1_chunk2_megatron_bin_data/mmap_qwen2_datasets_text_document
+PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/sunweigao/my/qwen-ckpts/Qwen2-0.5B
 TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
-LA_MODULE="mixattention"
-MIX_TYPE='agent'
-A_NUM=256
+LA_MODULE="gla"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
@@ -79,11 +74,9 @@ HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
 linear_moe_options=" \
         --use-la-module \
         --la-module ${LA_MODULE} \
-        --mix-type ${MIX_TYPE}\
-        --a-num ${A_NUM}\
         --la-mode fused_chunk \
         --base-model ${BASE_MODEL} \
-        --la-feature-map elu \
+        --la-feature-map swish \
         --la-output-norm rmsnorm \
         --la-gate-fn swish \
         --layer-type-list ${LAYER_TYPE_LIST} \
