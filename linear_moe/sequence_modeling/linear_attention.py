@@ -2,17 +2,9 @@ from dataclasses import dataclass
 from typing import Optional, Union
 from einops import rearrange
 import torch
-from megatron.core import parallel_state, tensor_parallel
+from megatron.core import parallel_state
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
-from megatron.core.parallel_state import (
-    get_data_parallel_group,
-    get_data_parallel_rank,
-    get_data_parallel_world_size,
-    get_tensor_model_parallel_group,
-    get_tensor_model_parallel_rank,
-    get_tensor_model_parallel_world_size,
-)
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.models.common.embeddings.rotary_pos_embedding import apply_rotary_pos_emb
 from megatron.core.utils import divide
@@ -53,12 +45,12 @@ class LinearAttention(MegatronModule):
         self.kv_projection_size = self.config.kv_channels * self.config.num_query_groups
 
         # Per attention head and per partition values.
-        world_size = parallel_state.get_tensor_model_parallel_world_size()
+        tensor_model_parallel_world_size = parallel_state.get_tensor_model_parallel_world_size()
         self.hidden_size_per_attention_head = divide(
             self.query_projection_size, self.config.num_attention_heads
         )
-        self.num_attention_heads_per_partition = divide(self.config.num_attention_heads, world_size)
-        self.num_query_groups_per_partition = divide(self.config.num_query_groups, world_size)
+        self.num_attention_heads_per_partition = divide(self.config.num_attention_heads, tensor_model_parallel_world_size)
+        self.num_query_groups_per_partition = divide(self.config.num_query_groups, tensor_model_parallel_world_size)
 
         self.qkv_proj = build_module(
             submodules.qkv_proj,
@@ -138,7 +130,7 @@ class LinearAttention(MegatronModule):
             beta = None
 
         q, k, v = torch.split(
-            qkv.view(qkv.size()[:-1] + (self.num_heads, -1)),
+            qkv.view(qkv.size()[:-1] + (self.num_attention_heads_per_partition, -1)),
             [self.head_dim, self.head_dim, self.head_dim],
             dim=3,
         )
