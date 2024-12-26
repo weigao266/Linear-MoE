@@ -4,15 +4,6 @@
 [submodule "third_party/Megatron-LM-0.9.0"]
 	path = third_party/Megatron-LM-0.9.0
 	url = https://github.com/NVIDIA/Megatron-LM.git
-[submodule "third_party/flash-linear-attention"]
-	path = third_party/flash-linear-attention
-	url = https://github.com/sustcsonglin/flash-linear-attention.git
-[submodule "third_party/LM-Evaluation-Harness"]
-	path = third_party/LM-Evaluation-Harness
-	url = https://github.com/jerryli1981/lm-evaluation-harness.git
-[submodule "third_party/opencompass"]
-	path = third_party/opencompass
-	url = https://github.com/open-compass/opencompass.git
 [submodule "third_party/flash-linear-attention-1018"]
 	path = third_party/flash-linear-attention-1018
 	url = https://github.com/sustcsonglin/flash-linear-attention.git
