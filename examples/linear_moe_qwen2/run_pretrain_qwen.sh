@@ -33,7 +33,7 @@ FU=false
 SP=false
 TE=false
 MB=false
-USE_GEMM=true
+USE_GEMM=false
 TOKEN_DROPPING=false
 TRAIN_CAPACITY_FACTOR=1.25
 EVAL_CAPACITY_FACTOR=2.0
@@ -42,13 +42,13 @@ DATASET_PATH=/cpfs01/shared/MOE/data-SlimPajama/slimpajama_chunk1_chunk2_megatro
 PRETRAIN_CHECKPOINT_PATH=/cpfs01/user/sunweigao/my/qwen-ckpts/Qwen2-0.5B
 TRAIN_TOKENS=15000000000
 WARMUP_TOKENS=10000
-OUTPUT_BASEPATH=./test
+OUTPUT_BASEPATH=./output
 
 LA_MODULE="gla"
 BASE_MODEL="qwen2"
 
 # for models except mamba2
-LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+LAYER_TYPE_LIST="LLLLLLLLLLLL"
 # LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
 # LAYER_TYPE_LIST="LLLNLLLNLLLN"
 # LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
@@ -78,7 +78,7 @@ linear_moe_options=" \
         --la-module ${LA_MODULE} \
         --la-mode fused_chunk \
         --base-model ${BASE_MODEL} \
-        --la-feature-map elu \
+        --la-feature-map swish \
         --la-output-norm rmsnorm \
         --la-gate-fn swish \
         --layer-type-list ${LAYER_TYPE_LIST} \
