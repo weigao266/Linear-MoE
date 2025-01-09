@@ -54,7 +54,7 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
 
     args = get_args()
     build_tokenizer(args)
-    print_rank_0('building Qwen2-Linear-MoE model ...')
+    print_rank_0('building Linear-MoE-Qwen2 model ...')
     if torch.distributed.get_rank() == 0:
         compute_weight_and_optimizer_memory(args, verbose=True)
 

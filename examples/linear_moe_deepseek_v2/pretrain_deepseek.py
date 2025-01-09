@@ -16,7 +16,6 @@ from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
 from megatron.core.datasets.gpt_dataset import MockGPTDataset, GPTDataset
 import megatron.legacy.model
 from megatron.training import pretrain
-from megatron.core.transformer.spec_utils import import_module
 from megatron.training.utils import (
     get_batch_on_this_cp_rank,
     get_batch_on_this_tp_rank,
@@ -36,6 +35,8 @@ from linear_moe.model.deepseek_v2.layer_specs import (
     get_hybrid_basic_linear_attention_linear_moe_layer_local_spec,
     get_hybrid_gla_linear_moe_layer_local_spec,
     get_hybrid_deltanet_linear_moe_layer_local_spec,
+    get_hybrid_lightning_attention_linear_moe_layer_local_spec,
+    get_hybrid_lasp2_linear_moe_layer_local_spec,
     get_hybrid_rwkv6_linear_moe_layer_local_spec,
     get_hybrid_hgrn2_linear_moe_layer_local_spec,
 )
@@ -63,10 +64,8 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
     """
     args = get_args()
     build_tokenizer(args)
-    print_rank_0('building DeepSeek V2 model ...')
-    # Experimental loading arguments from yaml
+    print_rank_0('building Linear-MoE-DeepSeek-V2 model ...')
     config = core_transformer_config_from_args(args, DeepSeekV2TransformerConfig)
-    use_te = args.transformer_impl == "transformer_engine"
 
     if args.use_la_module:
         if args.la_module == "mamba2":
@@ -83,12 +82,16 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             hybrid_transformer_layer_spec = get_hybrid_gla_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
         elif args.la_module == "deltanet":
             hybrid_transformer_layer_spec = get_hybrid_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
+        elif args.la_module == "lightning_attention":
+            hybrid_transformer_layer_spec = get_hybrid_lightning_attention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
+        elif args.la_module == "lasp2":
+            hybrid_transformer_layer_spec = get_hybrid_lasp2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
         elif args.la_module == "rwkv6":
             hybrid_transformer_layer_spec = get_hybrid_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
         elif args.la_module == "hgrn2":
             hybrid_transformer_layer_spec = get_hybrid_hgrn2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
     else:
-        if use_te:
+        if args.transformer_impl == "transformer_engine":
             transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
         else:
             transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts, args.moe_grouped_gemm, qk_layernorm=True)
@@ -143,7 +146,6 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             rotary_base=args.rotary_base,
             seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
         )
-
     return model
 
 
