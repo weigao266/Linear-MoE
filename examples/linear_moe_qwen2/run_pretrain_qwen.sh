@@ -16,7 +16,7 @@ export HF_ENDPOINT=https://hf-mirror.com
 ENV=dsw
 MODEL_SIZE=A0.3B
 BATCH_SIZE=1
-GLOBAL_BATCH_SIZE=4
+GLOBAL_BATCH_SIZE=2
 LR=1e-4
 MIN_LR=1e-5
 SEQ_LEN=1024
@@ -116,12 +116,12 @@ if [ $USE_GEMM = true ]; then
 fi
 
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=0,1
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=4
+GPUS_PER_NODE=2
 
 elif [ $ENV = dlc ]; then
 
