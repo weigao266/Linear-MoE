@@ -1,16 +1,21 @@
 #!/bin/bash
 set -e
 
-LINEAR_MOE_PATH=../../
-MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.4.0
+CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+LINEAR_MOE_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0
+FLA_PATH=${LINEAR_MOE_PATH}/third_party/flash-linear-attention-1018
+echo $MEGATRON_PATH
+echo $FLA_PATH
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
+export PYTHONPATH=${FLA_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export HF_ENDPOINT=https://hf-mirror.com
 
 ENV=dsw
 MODEL_SIZE=Small
 BATCH_SIZE=1
-GLOBAL_BATCH_SIZE=8
+GLOBAL_BATCH_SIZE=1
 LR=1e-5
 MIN_LR=1e-6
 SEQ_LEN=128
@@ -19,21 +24,50 @@ EXTRA_VOCAB_SIZE=0
 PR=bf16
 TP=1
 PP=1
+CP=1
+EP=1
 AC=sel
 DO=true
 FL=false
+FU=false
 SP=false
 TE=false
+MB=false
 MOE=true
+USE_GEMM=false
+TOKEN_DROPPING=false
+TRAIN_CAPACITY_FACTOR=1.25
+EVAL_CAPACITY_FACTOR=2.0
 SAVE_INTERVAL=100000
-DATASET_PATH=/cpfs01/user/sunweigao/my/mistral-datasets/wudao_mistralbpe_content_document
-PRETRAIN_CHECKPOINT_PATH=mistralai/Mistral-7B-v0.1
+DATASET_PATH=/cpfs01/shared/MOE/datasets/mistral-datasets/wudao_mistralbpe_content_document
+PRETRAIN_CHECKPOINT_PATH=/cpfs01/shared/MOE/landisen/models/Mistral-7B-v0.1
 TRAIN_TOKENS=100000000
 WARMUP_TOKENS=10000
 OUTPUT_BASEPATH=./output
 
+LA_MODULE="gla"
+BASE_MODEL="mixtral"
+
+# for models except mamba2
+LAYER_TYPE_LIST="LLLLLLLL"
+# LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLNLLLNLLLN"
+# LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
+
+# for only mamba2, MLP layers are fixed behind mamba or attention layers. M: mamba layer, *: attention layer
+# for pure_mamba2
+HYBRID_OVERRIDE_PATTERN="MMMMMMMM"
+# HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMMMMMM"
+# for hybrid_mamba2
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*"
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*MMM*"
+
+# # Turn on --megatron-hybrid-mamba-method to use the logic in Megatron-LM.
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-"
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-"
+
 # # SSM
-# linear_moe_options=" \
+# linear_moe_options=" \protobuf                      3.18.3
 #         --use-la-module \
 #         --use-cache \
 #         --la-module pure_mamba2 \
@@ -43,13 +77,13 @@ OUTPUT_BASEPATH=./output
 # Linear Attention
 linear_moe_options=" \
         --use-la-module \
-        --use-cache \
-        --la-module deltanet \
-        --la-mode chunk \
-        --base-model mixtral \
+        --la-module ${LA_MODULE} \
+        --la-mode fused_chunk \
+        --base-model ${BASE_MODEL} \
         --la-feature-map swish \
         --la-output-norm rmsnorm \
         --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
         "
 
 # # Linear RNN
@@ -63,13 +97,33 @@ linear_moe_options=" \
 #         --la-gate-fn swish \
 #         "
 
+if [ $MB = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-megablocks \
+        "
+fi
+
+if [ $TOKEN_DROPPING = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-train-capacity-factor ${TRAIN_CAPACITY_FACTOR} \
+        --moe-eval-capacity-factor ${EVAL_CAPACITY_FACTOR} \
+        --moe-token-dropping \
+        "
+fi
+
+if [ $USE_GEMM = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-grouped-gemm \
+        "
+fi
+
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=1
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=8
+GPUS_PER_NODE=1
 TOTAL_GPUS=$(($GPUS_PER_NODE*$NNODES))
 
 elif [ $ENV = dlc ]; then
@@ -217,7 +271,6 @@ SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
-        --train-data-path ${DATASET_PATH} \
         --data-path ${DATASET_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \

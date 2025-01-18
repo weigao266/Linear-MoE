@@ -18,20 +18,23 @@ from torch import Tensor
 from functools import partial
 from typing import Union
 
-from megatron import get_args
-from megatron import get_timers
-from megatron.core import mpu, tensor_parallel
+from megatron.training import get_args
+from megatron.training import print_rank_0
+from megatron.training import get_timers
+from megatron.core import mpu
 from megatron.core.enums import ModelType
-import megatron.model
-from megatron.utils import (
-    get_batch_on_this_tp_rank,
+from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
+from megatron.core.datasets.utils import get_blend_from_list
+from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
+from megatron.core.datasets.gpt_dataset import MockGPTDataset, GPTDataset
+import megatron.legacy.model
+from megatron.training import pretrain
+from megatron.training.utils import (
     get_batch_on_this_cp_rank,
+    get_batch_on_this_tp_rank,
     average_losses_across_data_parallel_group
 )
-from megatron.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
-from megatron.training import pretrain
-from megatron.core.datasets.gpt_dataset import GPTDatasetConfig
-from megatron.core.datasets.gpt_dataset import GPTDataset
+from megatron.training.arguments import core_transformer_config_from_args
 # from megatron.arguments import core_transformer_config_from_args
 from linear_moe.arguments import core_transformer_config_from_args
 
@@ -44,65 +47,96 @@ from linear_moe.sequence_modeling.mamba2.mamba_model import MambaModel
 from linear_moe.model.mixtral.layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
     get_gpt_layer_local_spec,
-    get_retention_linear_moe_layer_local_spec,
-    get_based_linear_moe_layer_local_spec,
-    get_rebased_linear_moe_layer_local_spec,
+    get_hybrid_retention_linear_moe_layer_local_spec,
+    get_hybrid_based_linear_moe_layer_local_spec,
+    get_hybrid_rebased_linear_moe_layer_local_spec,
     get_hybrid_mamba2_linear_moe_layer_local_spec,
-    get_basic_linear_attention_linear_moe_layer_local_spec,
-    get_gla_linear_moe_layer_local_spec,
-    get_rwkv6_linear_moe_layer_local_spec,
-    get_deltanet_linear_moe_layer_local_spec,
-    get_hgrn2_linear_moe_layer_local_spec,
+    get_hybrid_basic_linear_attention_linear_moe_layer_local_spec,
+    get_hybrid_gla_linear_moe_layer_local_spec,
+    get_hybrid_deltanet_linear_moe_layer_local_spec,
+    get_hybrid_lightning_attention_linear_moe_layer_local_spec,
+    get_hybrid_lasp2_linear_moe_layer_local_spec,
+    get_hybrid_rwkv6_linear_moe_layer_local_spec,
+    get_hybrid_hgrn2_linear_moe_layer_local_spec,
 )
 from linear_moe.model.mixtral.transformer_config import MixtralTransformerConfig
+from linear_moe.model.mixtral.hybrid.hybrid_model import HybridGPTModel
+from linear_moe.utils import compute_weight_and_optimizer_memory
 
-import huggingface_hub
-huggingface_hub.login("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")
 
+def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, MambaModel, megatron.legacy.model.GPTModel]:
 
-def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, MambaModel, megatron.model.GPTModel]:
     args = get_args()
     build_tokenizer(args)
+    print_rank_0('building Linear-MoE-Qwen2 model ...')
+    if torch.distributed.get_rank() == 0:
+        compute_weight_and_optimizer_memory(args, verbose=True)
+
     config = core_transformer_config_from_args(args, MixtralTransformerConfig)
 
     if args.use_la_module:
         if args.la_module == "mamba2":
-            mamba_stack_spec = get_hybrid_mamba2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+            mamba_stack_spec = get_hybrid_mamba2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "retention":
-            transformer_layer_spec = get_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+            hybrid_transformer_layer_spec = get_hybrid_retention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "based":
-            transformer_layer_spec = get_based_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+            hybrid_transformer_layer_spec = get_hybrid_based_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "rebased":
-            transformer_layer_spec = get_rebased_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+            hybrid_transformer_layer_spec = get_hybrid_rebased_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "linear_attention":
-            transformer_layer_spec = get_basic_linear_attention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+            hybrid_transformer_layer_spec = get_hybrid_basic_linear_attention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "gla":
-            transformer_layer_spec = get_gla_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+            hybrid_transformer_layer_spec = get_hybrid_gla_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "deltanet":
-            transformer_layer_spec = get_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+            hybrid_transformer_layer_spec = get_hybrid_deltanet_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "lightning_attention":
+            hybrid_transformer_layer_spec = get_hybrid_lightning_attention_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        elif args.la_module == "lasp2":
+            hybrid_transformer_layer_spec = get_hybrid_lasp2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "rwkv6":
-            transformer_layer_spec = get_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+            hybrid_transformer_layer_spec = get_hybrid_rwkv6_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
         elif args.la_module == "hgrn2":
-            transformer_layer_spec = get_hgrn2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm)
+            hybrid_transformer_layer_spec = get_hybrid_hgrn2_linear_moe_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
     else:
-        transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm)
+        if args.transformer_impl == "transformer_engine":
+            transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
+        else:
+            transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts, args.moe_grouped_gemm, args.qk_layernorm)
 
-    if args.la_module in ["mamba2"]:
-        model = MambaModel(
-            config=config,
-            mamba_stack_spec=mamba_stack_spec,
-            vocab_size=args.padded_vocab_size,
-            max_sequence_length=args.max_position_embeddings,
-            pre_process=pre_process,
-            hybrid_attention_ratio=args.hybrid_attention_ratio,
-            hybrid_mlp_ratio=args.hybrid_mlp_ratio,
-            hybrid_override_pattern=args.hybrid_override_pattern,
-            post_process=post_process,
-            fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
-            parallel_output=True,
-            share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
-            position_embedding_type=args.position_embedding_type
-        )
+    if args.use_la_module:
+        if args.la_module in ["mamba2"]:
+            model = MambaModel(
+                config=config,
+                mamba_stack_spec=mamba_stack_spec,
+                vocab_size=args.padded_vocab_size,
+                max_sequence_length=args.max_position_embeddings,
+                pre_process=pre_process,
+                hybrid_attention_ratio=args.hybrid_attention_ratio,
+                hybrid_mlp_ratio=args.hybrid_mlp_ratio,
+                hybrid_override_pattern=args.hybrid_override_pattern,
+                post_process=post_process,
+                fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
+                parallel_output=True,
+                share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+                position_embedding_type=args.position_embedding_type
+            )
+        else:
+            model = HybridGPTModel(
+                config=config,
+                hybrid_transformer_layer_spec=hybrid_transformer_layer_spec,
+                layer_type_list=args.layer_type_list,
+                vocab_size=args.padded_vocab_size,
+                max_sequence_length=args.max_position_embeddings,
+                pre_process=pre_process,
+                post_process=post_process,
+                fp16_lm_cross_entropy=args.fp16_lm_cross_entropy,
+                parallel_output=True,
+                share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
+                position_embedding_type=args.position_embedding_type,
+                rotary_percent=args.rotary_percent,
+                rotary_base=args.rotary_base,
+                seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
+            )
     else:
         model = GPTModel(
             config=config,
@@ -116,8 +150,9 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, Mamba
             share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
             position_embedding_type=args.position_embedding_type,
             rotary_percent=args.rotary_percent,
+            rotary_base=args.rotary_base,
+            seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor
         )
-
     return model
 
 
@@ -203,27 +238,54 @@ def is_dataset_built_on_rank():
     return (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()) and mpu.get_tensor_model_parallel_rank() == 0
 
 def core_gpt_dataset_config_from_args(args):
+    tokenizer = get_tokenizer()
+
     return GPTDatasetConfig(
-        is_built_on_rank=is_dataset_built_on_rank,
         random_seed=args.seed,
         sequence_length=args.seq_length,
-        blend=args.data_path,
+        blend=get_blend_from_list(args.data_path),
+        blend_per_split=[
+            get_blend_from_list(args.train_data_path),
+            get_blend_from_list(args.valid_data_path),
+            get_blend_from_list(args.test_data_path)
+        ],
         split=args.split,
+        num_dataset_builder_threads=args.num_dataset_builder_threads,
         path_to_cache=args.data_cache_path,
+        mmap_bin_files=args.mmap_bin_files,
+        tokenizer=tokenizer,
+        reset_position_ids=args.reset_position_ids,
+        reset_attention_mask=args.reset_attention_mask,
+        eod_mask_loss=args.eod_mask_loss,
+        create_attention_mask=args.create_attention_mask_in_dataloader,
     )
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
-    """Build train, valid, and test datasets."""
+    """Build the train test and validation datasets.
+
+    Args:
+        train_val_test_num_samples : A list containing the number of samples in train test and validation.
+    """
     args = get_args()
+    print_rank_0("> building train, validation, and test datasets for GPT ...")
+
     if "-Raw" in args.dataset:
-                train_ds, valid_ds, test_ds = \
-                                    build_pretrain_dataset_from_original(args.dataset)
+        train_ds, valid_ds, test_ds = build_pretrain_dataset_from_original(args.dataset)
     else:
+        config = core_gpt_dataset_config_from_args(args)
+
+        if config.mock:
+            dataset_type = MockGPTDataset
+        else:
+            dataset_type = GPTDataset
         train_ds, valid_ds, test_ds = BlendedMegatronDatasetBuilder(
-            GPTDataset,
+            dataset_type,
             train_val_test_num_samples,
-            core_gpt_dataset_config_from_args(args)
+            is_dataset_built_on_rank,
+            config
         ).build()
+
+        print_rank_0("> finished creating GPT datasets ...")
 
     return train_ds, valid_ds, test_ds
 
@@ -231,6 +293,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 if __name__ == "__main__":
 
     train_valid_test_datasets_provider.is_distributed = True
+
     pretrain(train_valid_test_datasets_provider,
              model_provider,
              ModelType.encoder_or_decoder,
