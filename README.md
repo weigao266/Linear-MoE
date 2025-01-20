@@ -7,9 +7,9 @@
 
 This repository offers a **production-ready framework** for modeling and training Linear-MoE models, non-invasively built on the latest [Megatron-Core](https://github.com/NVIDIA/Megatron-LM). It supports state-of-the-art open-source Mixture of Experts (MoE) models, seamlessly integrated with advanced linear sequence modeling techniques such as Linear Attention, State Space Models, and Linear RNNs. **Contributions through pull requests are highly encouraged!**
 
-<!-- <div align="center">
-  <img width="400" alt="image" src="https://github.com/xxx">
-</div> -->
+<p align="center">
+  <img src="./images/linear-moe-fig2.png" />
+</p>
 
 # Model Matrix Supported
 
@@ -30,7 +30,11 @@ This repository offers a **production-ready framework** for modeling and trainin
 | Softmax Attention |             [Softmax Attention](https://arxiv.org/abs/1706.03762) <br> (@Google)             | ✅ |   ✅   |   ✅   |  ✅   |
 |  |             [FlashAttention-2](https://arxiv.org/abs/2307.08691) <br> (@Princeton@Stanford)             | ✅ |   ✅   |   ✅   |  ✅   |
 
+# Code Structure
 
+<p align="center">
+  <img src="./images/linear-moe-fig1.png" />
+</p>
 
 # Env
 
@@ -173,6 +177,9 @@ We welcome contributions!  Please follow these steps:
 
 For major changes, please open an issue first to discuss the proposed changes.
 
+
+# Acknowledgement
+This repo is built upon [alibaba/PAI-Megatron-Patch](https://github.com/alibaba/Pai-Megatron-Patch). We use the triton-implemented linear attention kernels from [fla-org/flash-linear-attention](https://github.com/fla-org/flash-linear-attention), and CUDA implemented Mamba2 kernel from [state-spaces/mamba](https://github.com/state-spaces/mamba) to accelerate the execution.
 
 # Citation
 <!-- If you find this repo useful, please consider citing our works:
