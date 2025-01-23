@@ -1,19 +1,127 @@
 #!/bin/bash
+
 set -e
 
 CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
-MEGATRON_PATH=$( dirname $( dirname ${CURRENT_DIR}))
-export PYTHONPATH=$PYTHONPATH:${MEGATRON_PATH}:${MEGATRON_PATH}/Megatron-LM-240405
+LINEAR_MOE_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0
+FLA_PATH=${LINEAR_MOE_PATH}/third_party/flash-linear-attention-1018
+echo $MEGATRON_PATH
+echo $FLA_PATH
+export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
+export PYTHONPATH=${FLA_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export HF_ENDPOINT=https://hf-mirror.com
 
-ENV=$1
+ENV=dsw
+MODEL_SIZE=A2.4B
+BATCH_SIZE=1
+GLOBAL_BATCH_SIZE=4
+LR=1e-5
+MIN_LR=1e-6
+SEQ_LEN=128
+PAD_LEN=128
+PR=bf16
+TP=1
+PP=1
+CP=1
+EP=1
+AC=sel
+DO=true
+FL=false
+FU=false
+SP=false
+TE=false
+MB=false
+USE_GEMM=false
+TOKEN_DROPPING=false
+TRAIN_CAPACITY_FACTOR=1.25
+EVAL_CAPACITY_FACTOR=2.0
+SAVE_INTERVAL=100000
+DATASET_PATH=/cpfs01/user/sunweigao/my/deepseek-datasets/mmap_deepseekv2_datasets_text_document
+PRETRAIN_CHECKPOINT_PATH=deepseek-ai/DeepSeek-V2-Lite
+TRAIN_TOKENS=100000000
+WARMUP_TOKENS=10000
+OUTPUT_BASEPATH=./output
+
+LA_MODULE="lightning_attention"
+BASE_MODEL="qwen2"
+
+# for models except mamba2
+LAYER_TYPE_LIST="LLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLNLLLNLLLN"
+# LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
+
+# for only mamba2, MLP layers are fixed behind mamba or attention layers. M: mamba layer, *: attention layer
+# for pure_mamba2
+HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
+# HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMMMMMM"
+# for hybrid_mamba2
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*"
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*MMM*"
+
+# # Turn on --megatron-hybrid-mamba-method to use the logic in Megatron-LM.
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-"
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-"
+
+# # SSM
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --base-model ${BASE_MODEL} \
+#         "
+
+# Linear Attention
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --la-mode fused_chunk \
+        --base-model ${BASE_MODEL} \
+        --la-feature-map swish \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
+        "
+
+# # Linear RNN
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --la-mode chunk \
+#         --base-model ${BASE_MODEL} \
+#         --la-output-norm rmsnorm \
+#         --la-gate-fn swish \
+#         --layer-type-list ${LAYER_TYPE_LIST} \
+#         "
+
+if [ $MB = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-megablocks \
+        "
+fi
+
+if [ $TOKEN_DROPPING = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-train-capacity-factor ${TRAIN_CAPACITY_FACTOR} \
+        --moe-eval-capacity-factor ${EVAL_CAPACITY_FACTOR} \
+        --moe-token-dropping \
+        "
+fi
+
+if [ $USE_GEMM = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-grouped-gemm \
+        "
+fi
+
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=8
+GPUS_PER_NODE=4
 
 elif [ $ENV = dlc ]; then
 
@@ -23,29 +131,7 @@ GPUS_PER_NODE=${KUBERNETES_CONTAINER_RESOURCE_GPU}
 
 fi
 
-MODEL_SIZE=$2
-BATCH_SIZE=$3
-GLOBAL_BATCH_SIZE=$4
-LR=$5
-MIN_LR=$6
-SEQ_LEN=$7
-PAD_LEN=$8
-PR=$9
-TP=${10}
-PP=${11}
-EP=${12}
-AC=${13}
-DO=${14}
-FL=${15}
-SP=${16}
-SAVE_INTERVAL=${17}
-DATASET_PATH=${18}
-VALID_DATASET_PATH=${19}
-PRETRAIN_CHECKPOINT_PATH=${20}
-TRAIN_ITERS=${21}
-LR_WARMUP_ITERS=${22}
-OUTPUT_BASEPATH=${23}
-
+DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
 if [ $MODEL_SIZE = A21B ]; then
 
@@ -144,7 +230,7 @@ elif [ $PR = bf16 ]; then
         --bf16"
 elif [ $PR = fp8 ]; then
     pr_options=" \
-        --bf16
+        --bf16 \
         --fp8-hybrid \
         --fp8-amax-compute-algo max \
         --fp8-amax-history-len 1024 \
@@ -163,10 +249,28 @@ fi
 if [ $FL = true ]; then
     flash_options=" \
 		    --use-flash-attn"
+    export NVTE_FLASH_ATTN=1
 
 elif [ $FL = false ]; then
     flash_options=" \
                     "
+    export NVTE_FLASH_ATTN=0
+fi
+
+if [ $FU = true ]; then
+    export NVTE_FUSED_ATTN=1
+
+elif [ $FU = false ]; then
+    export NVTE_FUSED_ATTN=0
+fi
+
+if [ $TE = true ]; then
+    te_options=" \
+		    --transformer-impl transformer_engine"
+
+elif [ $TE = false ]; then
+    te_options=" \
+        --transformer-impl local"
 fi
 
 
@@ -184,9 +288,11 @@ if [ $PRETRAIN_CHECKPOINT_PATH != none ]; then
             --load $PRETRAIN_CHECKPOINT_PATH"
 fi
 
-LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
+TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-NAME="${ENV}-finetune-mcore-deepseek-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}"
+NAME="${ENV}-pretrain-mcore-deepseek-${MODEL_SIZE}-lr-${LR}-minlr-${MIN_LR}-bs-${BATCH_SIZE}-gbs-${GLOBAL_BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-moe-${MOE}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
@@ -194,13 +300,13 @@ current_time=$(date "+%Y.%m.%d-%H.%M.%S")
 TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${NAME}_${current_time}"
 mkdir -p ${TENSORBOARD_DIR}
 
+LOG_FILE="${OUTPUT_BASEPATH}/log/${current_time}_${NAME}.log"
+
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
-        --train-data-path ${DATASET_PATH} \
-        --valid-data-path ${VALID_DATASET_PATH} \
-        --test-data-path ${VALID_DATASET_PATH} \
+        --data-path ${DATASET_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style cosine \
@@ -211,10 +317,10 @@ megatron_options="  \
         --init-method-std 0.008 \
         --attention-dropout 0.0 \
         --hidden-dropout 0.0 \
-        --dataloader-type cyclic \
         --lr-decay-iters ${LR_DECAY_ITERS} \
         --lr-warmup-iters ${LR_WARMUP_ITERS} \
         --train-iters ${TRAIN_ITERS} \
+        --split 99,1,0 \
         --micro-batch-size ${BATCH_SIZE} \
         --global-batch-size ${GLOBAL_BATCH_SIZE} \
         --num-layers ${NUM_LAYERS} \
@@ -235,12 +341,13 @@ megatron_options="  \
         --log-validation-ppl-to-tensorboard \
         --tensor-model-parallel-size ${TP} \
         --pipeline-model-parallel-size ${PP} \
+        --context-parallel-size ${CP} \
         --no-load-optim \
         --no-load-rng \
         --num-workers 8 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type DeepSeekV2Tokenizer \
-        --dataset LLama-Pretrain-Raw \
+        --dataset LLama-Pretrain-Idxmap \
         --swiglu \
         --normalization RMSNorm \
         --norm-epsilon 1e-06 \
@@ -254,14 +361,12 @@ megatron_options="  \
         --rotary-base ${ROPE_THETA} \
         --rotary-scaling-factor ${SCALE_FACTOR} \
         --transformer-impl transformer_engine \
-        --eod-mask-loss
+        --no-create-attention-mask-in-dataloader \
+        --hybrid-override-pattern ${HYBRID_OVERRIDE_PATTERN} \
         "
 
-
-DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
-
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_deepseek.py
- ${megatron_options} ${pr_options} ${load_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${moe_options} ${linear_moe_options} 2>&1 | sudo tee -a $LOG_FILE"
 
 echo ${run_cmd}
 eval ${run_cmd}
