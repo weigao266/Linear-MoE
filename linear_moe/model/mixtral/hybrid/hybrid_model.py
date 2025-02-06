@@ -22,17 +22,15 @@ from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEm
 from megatron.core.models.common.language_module.language_module import LanguageModule
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.transformer.enums import AttnMaskType, ModelType
-from megatron.core.transformer.spec_utils import ModuleSpec
+from megatron.core.transformer.spec_utils import ModuleSpec, build_module
 from megatron.core.transformer.transformer_config import TransformerConfig
 
-from .transformer_block import TransformerBlock
-
-class GPTModel(LanguageModule):
+class HybridGPTModel(LanguageModule):
     """GPT Transformer language model.
 
     Args:
         config (TransformerConfig): Transformer config
-        transformer_layer_spec (ModuleSpec): Specifies module to use for transformer layers
+        hybrid_transformer_layer_spec (ModuleSpec): Specifies module to use for transformer layers
         vocab_size (int): Vocabulary size
         max_sequence_length (int): maximum size of sequence. This is used for positional embedding
         pre_process (bool, optional): Include embedding layer (used with pipeline parallelism). Defaults to True.
@@ -49,7 +47,8 @@ class GPTModel(LanguageModule):
     def __init__(
         self,
         config: TransformerConfig,
-        transformer_layer_spec: ModuleSpec,
+        hybrid_transformer_layer_spec: ModuleSpec,
+        layer_type_list: str,
         vocab_size: int,
         max_sequence_length: int,
         pre_process: bool = True,
@@ -64,7 +63,8 @@ class GPTModel(LanguageModule):
     ) -> None:
         super().__init__(config=config)
 
-        self.transformer_layer_spec: ModuleSpec = transformer_layer_spec
+        self.hybrid_transformer_layer_spec: ModuleSpec = hybrid_transformer_layer_spec
+        self.layer_type_list = layer_type_list
         self.vocab_size = vocab_size
         self.max_sequence_length = max_sequence_length
         self.pre_process = pre_process
@@ -100,9 +100,10 @@ class GPTModel(LanguageModule):
             )
 
         # Transformer.
-        self.decoder = TransformerBlock(
-            config=self.config,
-            spec=transformer_layer_spec,
+        self.decoder = build_module(
+            hybrid_transformer_layer_spec,
+            self.config,
+            layer_type_list=self.layer_type_list,
             pre_process=self.pre_process,
             post_process=self.post_process,
         )

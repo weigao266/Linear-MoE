@@ -1,19 +1,129 @@
 #!/bin/bash
-#sh run_pretrain_megatron_mixtral.sh dsw ../.. 0.125B 1 8 1e-5 1e-6 80 80 0 bf16 2 1 sel true true true true 100  /mnt/llama2-datasets/alpaca_data.json /mnt/mixtral-ckpts/Mixtral-8x7B-v0.1 10000000000 100000000 /mnt/test_mixtral_output
-
 set -e
-ENV=$1
-LINEAR_MOE_PATH=$2
-MEGATRON_PATH=${LINEAR_MOE_PATH}/Megatron-LM-240126
+
+CURRENT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+LINEAR_MOE_PATH=$( dirname $( dirname ${CURRENT_DIR}))
+MEGATRON_PATH=${LINEAR_MOE_PATH}/third_party/Megatron-LM-0.9.0
+FLA_PATH=${LINEAR_MOE_PATH}/third_party/flash-linear-attention-1018
+echo $MEGATRON_PATH
+echo $FLA_PATH
 export PYTHONPATH=${MEGATRON_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
+export PYTHONPATH=${FLA_PATH}:${LINEAR_MOE_PATH}:$PYTHONPATH
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export HF_ENDPOINT=https://hf-mirror.com
+
+ENV=dsw
+MODEL_SIZE=Small
+BATCH_SIZE=1
+GLOBAL_BATCH_SIZE=1
+LR=1e-5
+MIN_LR=1e-6
+SEQ_LEN=128
+PAD_LEN=128
+EXTRA_VOCAB_SIZE=0
+PR=bf16
+TP=1
+PP=1
+CP=1
+EP=1
+AC=sel
+DO=true
+FL=false
+FU=false
+SP=false
+TE=false
+MB=false
+MOE=true
+USE_GEMM=false
+TOKEN_DROPPING=false
+TRAIN_CAPACITY_FACTOR=1.25
+EVAL_CAPACITY_FACTOR=2.0
+SAVE_INTERVAL=100000
+DATASET_PATH=/cpfs01/shared/MOE/datasets/mistral-datasets/wudao_mistralbpe_content_document
+PRETRAIN_CHECKPOINT_PATH=/cpfs01/shared/MOE/landisen/models/Mistral-7B-v0.1
+TRAIN_TOKENS=100000000
+WARMUP_TOKENS=10000
+OUTPUT_BASEPATH=./output
+
+LA_MODULE="gla"
+BASE_MODEL="mixtral"
+
+# for models except mamba2
+LAYER_TYPE_LIST="LLLLLLLL"
+# LAYER_TYPE_LIST="LLLLLLLLLLLLLLLL"
+# LAYER_TYPE_LIST="LLLNLLLNLLLN"
+# LAYER_TYPE_LIST="LLLNLLLNLLLNLLLN"
+
+# for only mamba2, MLP layers are fixed behind mamba or attention layers. M: mamba layer, *: attention layer
+# for pure_mamba2
+HYBRID_OVERRIDE_PATTERN="MMMMMMMM"
+# HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMMMMMM"
+# for hybrid_mamba2
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*"
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*MMM*"
+
+# # Turn on --megatron-hybrid-mamba-method to use the logic in Megatron-LM.
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-"
+# HYBRID_OVERRIDE_PATTERN="M-M-M-*-M-M-M-*-M-M-M-*-M-M-M-*-"
+
+# # SSM
+# linear_moe_options=" \protobuf                      3.18.3
+#         --use-la-module \
+#         --use-cache \
+#         --la-module pure_mamba2 \
+#         --base-model mixtral \
+#         "
+
+# Linear Attention
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --la-mode fused_chunk \
+        --base-model ${BASE_MODEL} \
+        --la-feature-map swish \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
+        "
+
+# # Linear RNN
+# linear_moe_options=" \
+#         --use-la-module \
+#         --use-cache \
+#         --la-module rwkv6 \
+#         --la-mode chunk \
+#         --base-model mixtral \
+#         --la-output-norm groupnorm \
+#         --la-gate-fn swish \
+#         "
+
+if [ $MB = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-megablocks \
+        "
+fi
+
+if [ $TOKEN_DROPPING = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-train-capacity-factor ${TRAIN_CAPACITY_FACTOR} \
+        --moe-eval-capacity-factor ${EVAL_CAPACITY_FACTOR} \
+        --moe-token-dropping \
+        "
+fi
+
+if [ $USE_GEMM = true ]; then
+    linear_moe_options="${linear_moe_options} \
+        --moe-grouped-gemm \
+        "
+fi
+
 if [ $ENV = dsw ]; then
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=1
 MASTER_ADDR=localhost
 MASTER_PORT=$(shuf -n 1 -i 10000-65535)
 NNODES=1
 NODE_RANK=0
-GPUS_PER_NODE=8
+GPUS_PER_NODE=1
 TOTAL_GPUS=$(($GPUS_PER_NODE*$NNODES))
 
 elif [ $ENV = dlc ]; then
@@ -27,30 +137,20 @@ fi
 
 DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $NODE_RANK --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 
-MODEL_SIZE=$3
-BATCH_SIZE=$4
-GLOBAL_BATCH_SIZE=$5
-LR=$6
-MIN_LR=$7
-SEQ_LEN=$8
-PAD_LEN=$9
-EXTRA_VOCAB_SIZE=${10}
-PR=${11}
-TP=${12}
-PP=${13}
-AC=${14}
-DO=${15}
-FL=${16}
-SP=${17}
-TE=${18}
-MOE=${19}
-SAVE_INTERVAL=${20}
-DATASET_PATH=${21}
-VALID_DATASET_PATH=${22}
-PRETRAIN_CHECKPOINT_PATH=${23}
-TRAIN_ITERS=${24}
-LR_WARMUP_ITERS=${25}
-OUTPUT_BASEPATH=${26}
+if [ $MODEL_SIZE = Small ]; then
+
+NUM_LAYERS=8
+HIDDEN_SIZE=1024
+NUM_ATTN_HEADS=8
+INTERMEDIATE_SIZE=14336
+MAX_POSITION_EMBEDDINGS=32768
+SLW=4096
+
+gqa_options=" \
+		    --group-query-attention \
+		    --num-query-groups 8"
+
+fi
 
 if [ $MODEL_SIZE = 7B ]; then
 
@@ -153,9 +253,11 @@ fi
 
 EP=$(($TOTAL_GPUS/$TP/$PP))
 
-LR_DECAY_ITERS=$(( ${TRAIN_ITERS} - ${LR_WARMUP_ITERS}))
+TRAIN_ITERS=$(( ${TRAIN_TOKENS} / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_WARMUP_ITERS=$(( ${WARMUP_TOKENS}  / ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
+LR_DECAY_ITERS=$(( ${TRAIN_TOKENS} /  ${GLOBAL_BATCH_SIZE} / ${SEQ_LEN} ))
 
-NAME="${ENV}-finetune-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
+NAME="${ENV}-pretrain-megatron-gpt3-${MODEL_SIZE}-lr-${LR}-bs-${BATCH_SIZE}-seqlen-${SEQ_LEN}-pr-${PR}-tp-${TP}-pp-${PP}-ac-${AC}-do-${DO}-sp-${SP}-tt-${TRAIN_TOKENS}-wt-${WARMUP_TOKENS}"
 mkdir -p "${OUTPUT_BASEPATH}/tensorboard/"
 mkdir -p "${OUTPUT_BASEPATH}/checkpoint/"
 mkdir -p "${OUTPUT_BASEPATH}/log/"
@@ -163,13 +265,13 @@ current_time=$(date "+%Y.%m.%d-%H.%M.%S")
 TENSORBOARD_DIR="${OUTPUT_BASEPATH}/tensorboard/${NAME}_${current_time}"
 mkdir -p ${TENSORBOARD_DIR}
 
+LOG_FILE="${OUTPUT_BASEPATH}/log/${current_time}_${NAME}.log"
+
 SAVED_PRETRAIN_CHECKPOINT_PATH="${OUTPUT_BASEPATH}/checkpoint/${NAME}"
 
 megatron_options="  \
         --save ${SAVED_PRETRAIN_CHECKPOINT_PATH} \
-        --train-data-path ${DATASET_PATH} \
         --data-path ${DATASET_PATH} \
-        --valid-data-path ${VALID_DATASET_PATH} \
         --lr ${LR} \
         --min-lr ${MIN_LR} \
         --lr-decay-style cosine \
@@ -191,6 +293,7 @@ megatron_options="  \
         --seq-length ${SEQ_LEN} \
         --max-position-embeddings ${MAX_POSITION_EMBEDDINGS} \
         --max-padding-length ${PAD_LEN} \
+        --sliding-window ${SLW} \
         --log-interval 1 \
         --eval-interval 10000 \
         --eval-iters 10 \
@@ -208,7 +311,7 @@ megatron_options="  \
         --seed 1234 \
         --extra-vocab-size ${EXTRA_VOCAB_SIZE} \
         --patch-tokenizer-type MistralTokenizer \
-        --dataset LLama-Pretrain-Raw \
+        --dataset LLama-Pretrain-Idxmap \
         --swiglu \
         --use-rotary-position-embeddings \
         --position-embedding-type rope \
@@ -216,19 +319,26 @@ megatron_options="  \
         --disable-bias-linear \
         --disable-bias-linear-fc \
         --disable-bias-attn-fc \
-        --normalization RMSNorm \
+        --normalization LayerNorm \
         --no-masked-softmax-fusion \
         --no-position-embedding \
         --use-mcore-models \
         --no-rope-fusion \
-        --expert-model-parallel-size ${EP} \
         --distributed-timeout-minutes 6000 \
         --transformer-impl transformer_engine \
-        --eod-mask-loss"
+        "
+
+
 
 run_cmd="torchrun $DISTRIBUTED_ARGS pretrain_mcore_mistral.py
- ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options}"
+ ${megatron_options} ${pr_options} ${load_options} ${te_options} ${activation_checkpoint_options} ${do_options} ${flash_options} ${sp_options} ${gqa_options} ${moe_options} ${linear_moe_options} 2>&1 | sudo tee -a $LOG_FILE"
 
 echo ${run_cmd}
 eval ${run_cmd}
 set +x
+
+# note
+
+# 在使用layer_specs.py中FusedLayerNorm时，这里的--normalization必须设为LayerNorm，否则报错
+# --normalization RMSNorm \
+# --normalization LayerNorm \

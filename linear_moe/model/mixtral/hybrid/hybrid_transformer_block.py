@@ -34,10 +34,11 @@ from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
 from megatron.core.transformer.utils import sharded_state_dict_default
 from megatron.core.utils import make_sharded_tensor_for_checkpoint, make_viewless_tensor
+from megatron.core.transformer.identity_op import IdentityOp
 
-from .transformer_config import TransformerConfig
-from .transformer_layer import BaseTransformerLayer
-from .rms_norm import MixtralRMSNorm
+from linear_moe.model.qwen2.transformer_config import TransformerConfig
+from linear_moe.model.qwen2.transformer_layer import BaseTransformerLayer
+from linear_moe.model.qwen2.rms_norm import Qwen2RMSNorm
 
 def get_num_layers_to_build(config: TransformerConfig) -> int:
 
@@ -72,52 +73,38 @@ def get_num_layers_to_build(config: TransformerConfig) -> int:
 
     return num_layers_to_build
 
+@dataclass
+class LayerSymbols:
+    LINEAR_TRANSFORMER = 'L'
+    NORMAL_TRANSFORMER = 'N'
 
 @dataclass
-class TransformerBlockSubmodules:
-    layer_specs: List[ModuleSpec] = None
+class HybridTransformerBlockSubmodules:
+    linear_transformer_layer: Union[ModuleSpec, type] = IdentityOp
+    normal_transformer_layer: Union[ModuleSpec, type] = IdentityOp
 
 
-def _get_block_submodules(
-    config: TransformerConfig, spec: Union[TransformerBlockSubmodules, ModuleSpec],
-) -> TransformerBlockSubmodules:
-
-    # Transformer block submodules.
-    if isinstance(spec, TransformerBlockSubmodules):
-        return spec
-
-    # ModuleSpec here is generally assumed to be for a transformer layer that
-    # is implemented in `transformer_layer.py` or if it subclasses
-    # `BaseTransformerLayer` from the `transformer_layer.py` file.
-    elif isinstance(spec, ModuleSpec):
-        if issubclass(spec.module, TransformerBlock):
-            return spec.submodules
-        elif issubclass(spec.module, BaseTransformerLayer):
-            num_layers = get_num_layers_to_build(config)
-            return TransformerBlockSubmodules(layer_specs=[spec] * num_layers)
-        else:
-            raise Exception(f"specialize for {spec.module.__name__}.")
-    else:
-        raise Exception(f"specialize for {type(spec).__name__}.")
-
-
-class TransformerBlock(MegatronModule):
+class HybridTransformerBlock(MegatronModule):
     """Transformer class."""
 
     def __init__(
         self,
         config: TransformerConfig,
-        spec: Union[TransformerBlockSubmodules, ModuleSpec],
+        submodules: HybridTransformerBlockSubmodules,
+        layer_type_list: str,
         post_layer_norm: bool = True,
         pre_process: bool = True,
         post_process: bool = True,
     ):
         super().__init__(config=config)
 
-        self.submodules = _get_block_submodules(config, spec)
+        self.config = config
+        self.submodules = submodules
         self.post_layer_norm = post_layer_norm
         self.pre_process = pre_process
         self.post_process = post_process
+        self.layer_type_list = layer_type_list
+        
         # Dictionary to store CUDA graphs. Number of items in the dictionary = len(self.layers).
         # Item `i` in the dictionary is a list of `N` CUDA graphs for layer 'i' where N is the
         # number of microbatches. Multiple CUDA graphs per layer is required to support
@@ -155,22 +142,27 @@ class TransformerBlock(MegatronModule):
         self.num_layers_per_pipeline_rank = len(self.layers)
 
     def _build_layers(self):
-        # Transformer layers.
-        # @jcasper can we improve how we deal with layer_number?
-        # currently it's only used in CoreAttention?
-        # if self.apply_query_key_layer_scaling:
-        #     coeff = self.layer_number
-        #     self.norm_factor *= coeff
-        def build_layer(layer_spec, layer_number):
-            return build_module(layer_spec, config=self.config, layer_number=layer_number,)
+        # Hybrid Transformer layers.
 
+        self.layers = torch.nn.ModuleList()
         # offset is implicit in TransformerLayer
-        self.layers = torch.nn.ModuleList(
-            [
-                build_layer(layer_spec, i + 1)
-                for i, layer_spec in enumerate(self.submodules.layer_specs)
-            ]
-        )
+        for i, layer_type in enumerate(list(self.layer_type_list)):
+            if layer_type == LayerSymbols.LINEAR_TRANSFORMER:
+                layer = build_module(
+                    self.submodules.linear_transformer_layer,
+                    config=self.config,
+                    layer_number=i + 1,
+                )
+            elif layer_type == LayerSymbols.NORMAL_TRANSFORMER:
+                # Transformer layers apply their own pp_layer_offset
+                layer = build_module(
+                    self.submodules.normal_transformer_layer,
+                    config=self.config,
+                    layer_number=i + 1
+                )
+            else:
+                assert True, "unexpected layer_type"
+            self.layers.append(layer)
 
         # # TODO: add back standalone_embedding_stage
         # if self.num_layers == 0:
@@ -197,7 +189,7 @@ class TransformerBlock(MegatronModule):
                     eps=self.config.layernorm_epsilon,
                 )
             else:
-                self.final_layernorm = MixtralRMSNorm(
+                self.final_layernorm = Qwen2RMSNorm(
                     config=self.config,
                     hidden_size=self.config.hidden_size,
                     eps=self.config.layernorm_epsilon,
@@ -454,7 +446,7 @@ class TransformerBlock(MegatronModule):
             offset = layer._get_layer_offset()
 
             global_layer_offset = layer.layer_number - 1  # self.layer_number starts at 1
-            state_dict_prefix = f'{layer_prefix}{global_layer_offset - offset}.'  # module list index in TransformerBlock
+            state_dict_prefix = f'{layer_prefix}{global_layer_offset - offset}.'  # module list index in HybridTransformerBlock
             if non_homogeneous_layers:
                 sharded_prefix = f'{layer_prefix}{global_layer_offset}.'
                 sharded_pp_offset = []

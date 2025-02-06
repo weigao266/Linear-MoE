@@ -322,10 +322,59 @@ def build_tokenizer(args):
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'MistralTokenizer':
-        tokenizer = AutoTokenizer.from_pretrained(args.load,
-                                                  padding_side='right',
-                                                  use_fast=False,)
-        tokenizer.pad_token_id = 0
+        from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
+        class _MistralTokenizer(MegatronTokenizer):
+            def __init__(self, tokenizer_path, extra_vocab_size):
+                super().__init__(tokenizer_path)
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer_path,
+                    padding_side="right",
+                    use_fast=False,
+                    trust_remote_code=True
+                )
+                self.extra_vocab_size = extra_vocab_size
+
+            def __call__(self, text, return_tensors=None,
+                         padding=None, max_length=None, truncation=None, add_special_tokens=None):
+
+                return self.tokenizer(text, return_tensors=return_tensors, padding=padding,
+                        max_length=max_length, truncation=truncation, add_special_tokens=add_special_tokens)
+
+            @property
+            def vocab_size(self):
+                return self.tokenizer.vocab_size + self.extra_vocab_size
+
+            @property
+            def vocab(self):
+                return self.tokenizer.encoder
+
+            @property
+            def inv_vocab(self):
+                return self.tokenizer.decoder
+
+            def tokenize(self, text):
+                return self.tokenizer.encode(text)
+
+            def detokenize(self, token_ids):
+                return self.tokenizer.decode(token_ids)
+
+            @property
+            def eod(self):
+                return self.tokenizer.eos_token_id
+
+            @property
+            def eos_token(self):
+                return self.tokenizer.eos_token
+
+            @property
+            def pad_token_id(self):
+                return self.tokenizer.pad_token_id
+
+            @property
+            def eos_token_id(self):
+                return self.tokenizer.eos_token_id
+
+        tokenizer = _MistralTokenizer(args.load, args.extra_vocab_size)
         args.padded_vocab_size = tokenizer.vocab_size + args.extra_vocab_size
 
     elif args.patch_tokenizer_type == 'BloomTokenizerFromCustom':
