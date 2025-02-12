@@ -4,7 +4,7 @@
 
 </div>
 
-This repo offers Linear-MoE, a **production-ready framework** for modeling and training Linear-MoE models, non-invasively built on the latest [Megatron-Core](https://github.com/NVIDIA/Megatron-LM). **Contributions through pull requests are highly encouraged!**
+This repo offers Linear-MoE, a **production-ready library** for modeling and training Linear-MoE models, non-invasively built on the latest [Megatron-Core](https://github.com/NVIDIA/Megatron-LM). **Contributions through pull requests are highly encouraged!**
 
 <!-- It supports state-of-the-art open-source Mixture of Experts (MoE) models, seamlessly integrated with advanced linear sequence modeling techniques such as Linear Attention, State Space Modeling, and Linear RNN. LInear-MoE is still under development, **Contributions through pull requests are highly encouraged!** -->
 
@@ -106,15 +106,84 @@ To pretrain or finetune a Linear-MoE model, you can:
 
 1. Open `examples`, choose the model you are going to pretrain or finetune, e.g. `linear_moe_qwen2`.
 
-2. Edit `run_pretrain_qwen.sh` or `run_finetune_qwen.sh` to set your configurations, like:
+2. Edit `run_pretrain_qwen.sh` or `run_finetune_qwen.sh` to set your configurations including:
 - Model size (e.g., 0.5B, 1.5B, 7B)
 - Batch size
 - Learning rate
 - Model architecture (e.g., LSM modules, number of experts)
 - Distributed training settings (TP, PP, CP, EP sizes)
-
+- ...
 
 3. **Start pretraining or finetuning** by: `sh run_pretrain_qwen.sh` or `sh run_finetune_qwen.sh`.
+
+For example, to train a A0.3B (hybrid) `linear-moe-qwen2` model with `LA_MOUDLE=hgrn2`, you can config `run_pretrain_qwen.sh` as:
+```bash
+ENV=dsw
+MODEL_SIZE=A0.3B
+BATCH_SIZE=2
+GLOBAL_BATCH_SIZE=4
+LR=1e-4
+MIN_LR=1e-5
+SEQ_LEN=2048
+PAD_LEN=2048
+PR=bf16
+TP=1
+PP=1
+CP=1
+EP=1
+AC=sel
+DO=true
+FL=false
+FU=false
+SP=false
+TE=false
+MB=false
+USE_GEMM=false
+TOKEN_DROPPING=false
+TRAIN_CAPACITY_FACTOR=1.25
+EVAL_CAPACITY_FACTOR=2.0
+SAVE_INTERVAL=100000
+DATASET_PATH=xxx/qwen-datasets/wudao_qwenbpe_text_document
+PRETRAIN_CHECKPOINT_PATH=xxx/qwen-ckpts/Qwen2-0.5B
+TRAIN_TOKENS=15000000000
+WARMUP_TOKENS=10000
+OUTPUT_BASEPATH=./output
+
+LA_MODULE="hgrn2"
+BASE_MODEL="qwen2"
+
+# for linear attention and linear RNN models
+# pure linear
+# LAYER_TYPE_LIST="LLLLLLLLLLLL"
+# hybrid model
+LAYER_TYPE_LIST="LLLNLLLNLLLN"
+
+# for SSM models (Mamba2), MLP layers are fixed behind mamba or attention layers. 
+# M: mamba layer, *: attention layer
+# pure mamba2
+# HYBRID_OVERRIDE_PATTERN="MMMMMMMMMMMM"
+# hybrid mamba2
+# HYBRID_OVERRIDE_PATTERN="MMM*MMM*MMM*"
+
+# Linear Attention & Linear RNN
+linear_moe_options=" \
+        --use-la-module \
+        --la-module ${LA_MODULE} \
+        --la-mode fused_chunk \
+        --base-model ${BASE_MODEL} \
+        --la-feature-map swish \
+        --la-output-norm rmsnorm \
+        --la-gate-fn swish \
+        --layer-type-list ${LAYER_TYPE_LIST} \
+        "
+
+# # SSM
+# linear_moe_options=" \
+#         --use-la-module \
+#         --la-module ${LA_MODULE} \
+#         --base-model ${BASE_MODEL} \
+#         "
+```
 
 
 ## Evaluation
@@ -128,5 +197,17 @@ We built this repo upon [alibaba/PAI-Megatron-Patch](https://github.com/alibaba/
 # Citation
 If you find this repo useful, please consider citing our work:
 ```bib
+@software{sun2024linear-moe,
+  title  = {Linear-MoE: A Production-Ready Library for Modeling and Training Linear-MoE Models},
+  author = {Sun, Weigao and Lan, Disen and Zhu, Tong and Du, Jusen},
+  url    = {https://github.com/OpenSparseLLMs/Linear-MoE},
+  year   = {2024}
+}
 
+@article{sun2025lasp2,
+  title={LASP-2: Rethinking Sequence Parallelism for Linear Attention and Its Hybrid},
+  author={Sun, Weigao and Lan, Disen and Zhong, Yiran and Qu, Xiaoye and Cheng, Yu},
+  journal={arXiv preprint arXiv:2502.07563},
+  year={2025}
+}
 ```
