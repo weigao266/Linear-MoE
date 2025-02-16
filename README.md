@@ -189,25 +189,3 @@ linear_moe_options=" \
 ## Evaluation
 
 We use [EleutherAI/lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) for benchmark evaluation. See [eval/README.md](eval/README.md) for detailed instruction.
-
-
-# Acknowledgement
-We built this repo upon [alibaba/PAI-Megatron-Patch](https://github.com/alibaba/Pai-Megatron-Patch), and take [Megatron-Core](https://github.com/NVIDIA/Megatron-LM) as the training engine. We use the triton-implemented linear attention kernels from [fla-org/flash-linear-attention](https://github.com/fla-org/flash-linear-attention), and CUDA implemented Mamba2 kernel from [state-spaces/mamba](https://github.com/state-spaces/mamba) to accelerate the execution.
-
-# Citation
-If you find this repo useful, please consider citing our work:
-```bib
-@software{sun2024linear-moe,
-  title  = {Linear-MoE: A Production-Ready Library for Modeling and Training Linear-MoE Models},
-  author = {Sun, Weigao and Lan, Disen and Zhu, Tong and Du, Jusen},
-  url    = {https://github.com/OpenSparseLLMs/Linear-MoE},
-  year   = {2024}
-}
-
-@article{sun2025lasp2,
-  title={LASP-2: Rethinking Sequence Parallelism for Linear Attention and Its Hybrid},
-  author={Sun, Weigao and Lan, Disen and Zhong, Yiran and Qu, Xiaoye and Cheng, Yu},
-  journal={arXiv preprint arXiv:2502.07563},
-  year={2025}
-}
-```
